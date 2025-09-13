@@ -1,61 +1,52 @@
-# ---- Rendering ----
+# core/__init__.py
+
+# ---- Rendering (PDF/DOCX → PNG for OCR) ----
 from .render import (
-    pptx_to_png_windows_com,
-    render_slides_to_images,
+    pdf_to_png,
+    docx_to_pdf,
+    render_paper_to_images,
 )
 
-# ---- Notes / OCR→Markdown ----
-from .notes import (
-    extract_notes_and_alttext,
-    bbox_to_xywh,
-    normalize_lines,
-    lines_to_markdown,
-    ocr_slide_to_markdown,
-    slides_to_clean_text,
+# ---- Upload / OCR text extraction ----
+from .mock_upload import (
+    papers_to_clean_text,
 )
 
 # ---- OCR engines ----
 from .ocr import (
-    init_easyocr_temp,
+    init_easyocr_reader,
     init_paddleocr,
     get_ocr_engine,
     ocr_image_easy,
     ocr_image_paddle,
 )
 
-# ---- LLM QG helpers (OpenAI) ----
-from .llm_qg import (
+# ---- LLM mock paper generation ----
+from .llm_mockgen import (
     configure_openai,
-    chunk_slides_for_qg,
-    build_qg_prompt,
-    safe_json_parse,
-    generate_qa,
-    explain_batch,
-    infer_title,
+    build_mockpaper_prompt,
+    generate_mock_papers,
 )
 
-# ---- PPTX export ----
-from .pptx_export import build_qa_deck
+# ---- PDF export (exam paper + answers) ----
+from .mock_export import build_mockpaper_pdf
 
-# ---- Orchestration ----
+# ---- Orchestration pipeline ----
 from .pipeline import run_pipeline_end_to_end
 
 
 __all__ = [
     # render
-    "pptx_to_png_windows_com", "render_slides_to_images",
-    # notes / ocr-md
-    "extract_notes_and_alttext", "bbox_to_xywh", "normalize_lines",
-    "lines_to_markdown", "ocr_slide_to_markdown", "slides_to_clean_text",
+    "pdf_to_png", "docx_to_pdf", "render_paper_to_images",
+    # upload / ocr
+    "papers_to_clean_text",
     # ocr
-    "init_easyocr_temp", "init_paddleocr", "get_ocr_engine",
+    "init_easyocr_reader", "init_paddleocr", "get_ocr_engine",
     "ocr_image_easy", "ocr_image_paddle",
-    # llm qg (openai)
-    "configure_openai", "chunk_slides_for_qg", "build_qg_prompt",
-    "safe_json_parse", "generate_qa",
-    "explain_batch", "infer_title",
-    # pptx
-    "build_qa_deck",
+    # llm mockgen
+    "configure_openai", "build_mockpaper_prompt", "generate_mock_papers",
+    # pdf export
+    "build_mockpaper_pdf",
     # pipeline
     "run_pipeline_end_to_end",
 ]

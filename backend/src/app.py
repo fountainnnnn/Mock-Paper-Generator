@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from dotenv import load_dotenv
@@ -8,11 +8,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 try:
-    from src.core import run_pipeline_end_to_end
+    from src.core.pipeline import run_pipeline_end_to_end
 except Exception as e:
     raise RuntimeError(f"Failed to import pipeline from src.core: {e}")
 
-app = FastAPI(title="Slides → Quiz Deck API")
+app = FastAPI(title="Mock Paper Generator API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -27,34 +27,27 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 @app.get("/")
 def index():
     return {
-        "message": "Slides → Quiz Deck API is running",
+        "message": "Mock Paper Generator API is running",
         "endpoints": ["/generate", "/files/{filename}", "/healthz"],
     }
 
 
 @app.post("/generate")
 async def generate(
-    request: Request,
     file: UploadFile = File(...),
-    ocr_engine: str = Form("easyocr"),
     language: str = Form("en"),
-    prefer_com: bool = Form(False),
-    dpi: int = Form(180),
+    dpi: int = Form(220),
     openai_api_key: str = Form(""),
     model_name: str = Form("gpt-4o-mini"),
-    total_questions: int = Form(20),
-    mix_mode: str = Form("balanced"),
-    mcq_n: int = Form(0),
-    theory_n: int = Form(0),
-    codefill_n: int = Form(0),
-    difficulty: str = Form("mixed"),
-    deck_title: str = Form("Auto Quiz"),
-    include_thumbs: bool = Form(True),
+    num_mocks: int = Form(1),   # how many mock papers (1–3)
+    difficulty: str = Form("same"),
 ):
+    # Save uploaded file
     content = await file.read()
     tmp_in = OUTPUT_DIR / f"upload_{file.filename}"
     tmp_in.write_bytes(content)
 
+    # API key check
     key = openai_api_key or os.getenv("OPENAI_API_KEY", "")
     if not key:
         return JSONResponse(
@@ -63,43 +56,35 @@ async def generate(
         )
     os.environ["OPENAI_API_KEY"] = key
 
+    # Run pipeline
     try:
-        result_pptx, zip_path, out_dir, msg = run_pipeline_end_to_end(
-            pptx_file=tmp_in.open("rb"),
-            ocr_engine=ocr_engine,
+        pdf_paths, concat_txt_path, out_dir = run_pipeline_end_to_end(
+            files=[tmp_in],
             language=language,
-            prefer_com=prefer_com,
             dpi=dpi,
             openai_api_key=key,
             model_name=model_name,
-            total_questions=total_questions,
-            mix_mode=mix_mode,
-            mcq_n=mcq_n,
-            theory_n=theory_n,
-            codefill_n=codefill_n,
+            num_mocks=num_mocks,
             difficulty=difficulty,
-            deck_title=deck_title,
-            include_thumbs=include_thumbs,
+            out_dir=str(OUTPUT_DIR),
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Pipeline error: {e}")
 
-    if not result_pptx:
-        raise HTTPException(status_code=500, detail=f"Generation failed: {msg}")
+    if not pdf_paths:
+        raise HTTPException(status_code=500, detail="Generation failed, no PDFs produced")
 
-    out_name = Path(file.filename).stem + "_quizdeck.pptx"
-    out_path = OUTPUT_DIR / out_name
-    try:
-        data = Path(result_pptx).read_bytes()
-    except Exception:
-        data = result_pptx if isinstance(result_pptx, (bytes, bytearray)) else bytes(result_pptx)
-    out_path.write_bytes(data)
+    # Build public URLs
+    space_url = os.getenv("SPACE_URL", "https://crystallizedcrust-mockpaper-generator.hf.space")
+    urls = [f"{space_url}/files/{Path(p).name}" for p in pdf_paths]
 
-    # ✅ Always return a public HTTPS link
-    space_url = os.getenv("SPACE_URL", "https://crystallizedcrust-quiz-generator.hf.space")
-    abs_url = f"{space_url}/files/{out_name}"
-
-    return {"status": "ok", "filename": out_name, "url": abs_url}
+    return {
+        "status": "ok",
+        "generated_files": [Path(p).name for p in pdf_paths],
+        "urls": urls,
+        "text_extracted": concat_txt_path,
+        "out_dir": out_dir,
+    }
 
 
 @app.get("/files/{filename}")
@@ -109,7 +94,7 @@ def get_file(filename: str):
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(
         path,
-        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        media_type="application/pdf",
         filename=filename,
     )
 

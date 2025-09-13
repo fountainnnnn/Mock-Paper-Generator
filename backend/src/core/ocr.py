@@ -1,9 +1,16 @@
 # -*- coding: utf-8 -*-
+"""
+OCR utilities for mock exam paper extraction (math/science compatible).
+- Persistent EasyOCR cache
+- PaddleOCR optional fallback
+- Tuned thresholds for printed/scanned exam PDFs
+- Confidence filtering, coordinate sorting, math symbol normalization
+"""
+
 from __future__ import annotations
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Tuple
 from pathlib import Path
-import os
-import tempfile
+import os, tempfile, re
 
 # --- Third-party (guarded) ---
 try:
@@ -27,22 +34,14 @@ except Exception:  # pragma: no cover
 # Internal helpers / cache
 # =========================
 def _mk_temp_dir(prefix: str = "easyocr_") -> Path:
-    """Create a temp directory we can optionally clean up later."""
     p = Path(tempfile.mkdtemp(prefix=prefix))
     return p
 
-# Reuse EasyOCR readers so we don’t reload models for each call
-# Keyed by (tuple(lang_list), use_gpu, storage_dir)
 _EASYOCR_CACHE: Dict[Tuple[Tuple[str, ...], bool, str], Any] = {}
 
 
 def _choose_storage_dir() -> Path:
-    """
-    Choose model cache directory.
-    - Default: persistent under ~/.cache/easyocr_models  (faster restarts)
-    - If SLIDES_OCR_EPHEMERAL=1: use a temp dir (clean each process)
-    """
-    if os.getenv("SLIDES_OCR_EPHEMERAL") == "1":
+    if os.getenv("PAPERS_OCR_EPHEMERAL") == "1":
         return _mk_temp_dir("easyocr_")
     base = Path.home() / ".cache" / "easyocr_models"
     base.mkdir(parents=True, exist_ok=True)
@@ -61,16 +60,10 @@ def _gpu_allowed(force_cpu: bool) -> bool:
 
 
 # =========================
-# Public API (unchanged)
+# Public API
 # =========================
-def init_easyocr_temp(lang_list: List[str] = ["en"], force_cpu: bool = True):
-    """
-    Initialize EasyOCR Reader with:
-    - persistent model cache by default (override with SLIDES_OCR_EPHEMERAL=1)
-    - GPU only if available AND force_cpu is False
-    """
-    import easyocr  # lazy import; raises if missing
-
+def init_easyocr_reader(lang_list: List[str] = ["en"], force_cpu: bool = True):
+    import easyocr
     storage_dir = _choose_storage_dir()
     use_gpu = _gpu_allowed(force_cpu=force_cpu)
 
@@ -83,75 +76,93 @@ def init_easyocr_temp(lang_list: List[str] = ["en"], force_cpu: bool = True):
         gpu=use_gpu,
         model_storage_directory=str(storage_dir),
         user_network_directory=str(storage_dir),
-        download_enabled=True,   # ensure models can be fetched if missing
+        download_enabled=True,
         verbose=False,
     )
-    # mark a temp dir reference ONLY if ephemeral (so a caller can clean up)
-    if os.getenv("SLIDES_OCR_EPHEMERAL") == "1":
-        reader._temp_model_dir = str(storage_dir)  # type: ignore[attr-defined]
     _EASYOCR_CACHE[key] = reader
     return reader
 
 
 def init_paddleocr(lang: str = "en"):
-    """
-    Initialize PaddleOCR (optional dependency). On Windows this often conflicts with protobuf.
-    We keep it available behind a flag.
-    """
     try:
-        from paddleocr import PaddleOCR  # type: ignore
+        from paddleocr import PaddleOCR
     except Exception as e:
         raise RuntimeError(f"PaddleOCR not available: {e}")
     return PaddleOCR(use_angle_cls=True, lang=lang)
 
 
 def get_ocr_engine(engine_name: str, lang: str):
-    """
-    Returns (engine, use_paddle_bool)
-    - "paddle" → PaddleOCR if available; else warn & fall back to EasyOCR (CPU)
-    - default  → EasyOCR (CPU or GPU if available and not forced off)
-    """
     eng = (engine_name or "").lower()
     if eng == "paddle":
         try:
             ocr = init_paddleocr(lang)
             return ocr, True
         except Exception as e:
-            print("[WARN] PaddleOCR unavailable; falling back to EasyOCR (CPU):", e)
-    # default / fallback: EasyOCR on CPU (unless CUDA available and not forced off)
-    return init_easyocr_temp([lang], force_cpu=True), False
+            print("[WARN] PaddleOCR unavailable; falling back to EasyOCR:", e)
+    return init_easyocr_reader([lang], force_cpu=True), False
 
 
-def ocr_image_easy(reader, image):  # str|bytes|PIL.Image|np.ndarray
+# =========================
+# OCR helpers
+# =========================
+def _normalize_math_text(text: str) -> str:
     """
-    Run EasyOCR on an image (path, bytes, PIL, or np array).
-    Returns: List[{'bbox': [(x,y),...], 'text': str, 'conf': float}]
+    Normalize OCR quirks in math/science text.
     """
+    replacements = {
+        "O": "0",  # common misread
+        "l": "1",  # lowercase L → one
+        "×": "x",
+        "−": "-",  # minus variants
+        "--": "–",
+        "<=": "≤",
+        ">=": "≥",
+        "√ ": "√",
+        "∑ ": "∑",
+    }
+    for k, v in replacements.items():
+        text = text.replace(k, v)
+
+    # collapse multiple spaces
+    text = re.sub(r"\s+", " ", text)
+
+    return text.strip()
+
+
+def _sort_by_coordinates(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Sort OCR results top-to-bottom, then left-to-right.
+    """
+    return sorted(items, key=lambda x: (x["bbox"][0][1], x["bbox"][0][0]))
+
+
+# =========================
+# OCR runners
+# =========================
+def ocr_image_easy(reader, image, conf_threshold: float = 0.3):
     if reader is None:
         raise RuntimeError("EasyOCR reader is None.")
     if Image is None or np is None:
-        raise RuntimeError("Pillow and numpy are required for EasyOCR.")
+        raise RuntimeError("Pillow and numpy are required.")
 
     try:
-        # EasyOCR accepts file paths or numpy arrays
         if isinstance(image, (str, bytes, Path)):
-            res = reader.readtext(str(image), detail=1, paragraph=False)
+            res = reader.readtext(str(image), detail=1, paragraph=True)
         else:
             if isinstance(image, Image.Image):
                 image = np.array(image.convert("RGB"))
-            # Slightly tuned params for slides (more structured text)
             res = reader.readtext(
                 image,
                 detail=1,
-                paragraph=False,
+                paragraph=True,
                 contrast_ths=0.05,
-                adjust_contrast=0.5,
+                adjust_contrast=0.7,
                 text_threshold=0.6,
                 low_text=0.3,
-                width_ths=0.6,
+                width_ths=0.7,
                 slope_ths=0.2,
                 ycenter_ths=0.5,
-                height_ths=0.6,
+                height_ths=0.7,
                 mag_ratio=1.5,
             )
     except Exception as e:
@@ -159,24 +170,19 @@ def ocr_image_easy(reader, image):  # str|bytes|PIL.Image|np.ndarray
 
     out: List[Dict[str, Any]] = []
     for item in res:
-        # EasyOCR returns [(x,y), ...], text, conf
         try:
             bbox, text, conf = item
-            text = (text or "").strip()
-            if not text:
+            text = _normalize_math_text(text or "")
+            if not text or conf < conf_threshold:
                 continue
             out.append({"bbox": bbox, "text": text, "conf": float(conf)})
         except Exception:
-            # unexpected tuple shape
             continue
-    return out
+
+    return _sort_by_coordinates(out)
 
 
-def ocr_image_paddle(ocr, image):
-    """
-    Run PaddleOCR on an image (path or np array).
-    Returns: List[{'bbox': [(x,y),...], 'text': str, 'conf': float}]
-    """
+def ocr_image_paddle(ocr, image, conf_threshold: float = 0.3):
     if ocr is None:
         raise RuntimeError("PaddleOCR engine is None.")
 
@@ -186,21 +192,20 @@ def ocr_image_paddle(ocr, image):
         raise RuntimeError(f"PaddleOCR failed: {e}")
 
     out: List[Dict[str, Any]] = []
-    # Paddle returns [[ [ [x,y],...], (text, conf) ], ...] potentially wrapped per page
     try:
         for page in res:
             for det in page:
                 bbox, meta = det
                 text, conf = meta
-                text = (text or "").strip()
-                if not text:
+                text = _normalize_math_text(text or "")
+                if not text or conf < conf_threshold:
                     continue
                 out.append({"bbox": bbox, "text": str(text), "conf": float(conf)})
     except Exception:
-        # Some Paddle builds return a single page (no nesting)
         for bbox, (text, conf) in res:
-            text = (text or "").strip()
-            if not text:
+            text = _normalize_math_text(text or "")
+            if not text or conf < conf_threshold:
                 continue
             out.append({"bbox": bbox, "text": str(text), "conf": float(conf)})
-    return out
+
+    return _sort_by_coordinates(out)

@@ -1,8 +1,10 @@
 ![License](https://img.shields.io/badge/license-Proprietary-red.svg)
 
 
-# quiz-slides-generator
-A generator that generates slides containing quizzes questions with questions, answers and explanations. Helps lecturers save time.
+# Mock Paper Generator
+A generator that generates mock papers of similar formatting and style of questions. Helps students get more practice papers in preparation for examinations
+
+<hr>
 
 
 To start backend run: <br>
