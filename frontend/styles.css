@@ -1,0 +1,39 @@
+/* Pastel, light, minimal — override a few Bootstrap vars */
+:root {
+  --brand-hero: #f4f7ff;        /* soft indigo tint */
+  --brand-primary: #6f8bf6;     /* pastel indigo */
+  --brand-secondary: #6b7280;   /* slate */
+}
+
+/* Use a consistent soft palette */
+.btn-primary,
+.btn-outline-primary:hover,
+.btn-outline-primary:active,
+.btn-outline-primary:focus {
+  background-color: var(--brand-primary) !important;
+  border-color: var(--brand-primary) !important;
+}
+
+.text-primary { color: var(--brand-primary) !important; }
+.bg-hero { background: var(--brand-hero); }
+
+/* Make cards a bit softer */
+.card { border-color: #e9ecf5; }
+.border-bottom { border-color: #e9ecf5 !important; }
+.border-top { border-color: #e9ecf5 !important; }
+
+/* Inputs */
+.form-control,
+.form-select {
+  border-color: #dbe1f1;
+}
+
+/* Keep things readable */
+body { color: #0f172a; background: #fafbff; }
+.lead, .text-secondary { color: #6b7280 !important; }
+
+/* Progress bar color align to brand */
+.progress-bar { background-color: var(--brand-primary); }
+
+/* Small spacing tweaks */
+.hero .btn { box-shadow: 0 6px 18px rgba(111, 139, 246, 0.25); }

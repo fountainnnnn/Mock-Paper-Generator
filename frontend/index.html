@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Slides → Quiz Deck</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📘</text></svg>">
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Custom -->
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* smooth anchor scroll without touching your styles.css */
+    html { scroll-behavior: smooth; }
+    .contact-section {
+      background: #f8f9fa;
+      border-top: 1px solid #dee2e6;
+      padding: 2rem 0;
+    }
+    .linkedin-logo {
+      width: 32px;
+      height: 32px;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+  </style>
+</head>
+<body class="d-flex flex-column min-vh-100">
+
+  <!-- NAVBAR (brand only) -->
+  <nav class="navbar navbar-light border-bottom bg-white">
+    <div class="container">
+      <a class="navbar-brand fw-semibold" href="#">Quiz Deck</a>
+    </div>
+  </nav>
+
+  <!-- HERO (solid pastel) -->
+  <header class="py-5 hero bg-hero border-bottom">
+    <div class="container text-center">
+      <h1 class="display-6 fw-bold mb-2 text-primary">Turn Slides into Polished Quiz Decks</h1>
+      <p class="lead text-secondary mb-3">
+        Upload a PPTX or PDF, choose your mix of questions, and download a ready-to-present Q&amp;A deck.
+      </p>
+      <!-- Made by -->
+      <p class="text-muted small mb-4">Made by <strong>Mervin Ng</strong></p>
+
+      <a id="get-started" href="#generate" class="btn btn-primary px-4">Get Started</a>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <main id="generate" class="flex-grow-1 py-5">
+    <div class="container">
+      <div class="row justify-content-center">
+        <div class="col-lg-10 col-xl-9">
+          <div class="card shadow-sm" id="gen-card">
+            <div class="card-body">
+              <h3 class="card-title mb-3">Generate your quiz deck</h3>
+              <p class="text-secondary">Only the essentials — total questions, mix, difficulty, and an optional API key.</p>
+
+              <form id="gen-form" class="gy-3">
+                <!-- File -->
+                <div class="mb-3">
+                  <label class="form-label">Lecture file (.pptx / .pdf)</label>
+                  <input id="file-input" class="form-control" type="file" name="file" accept=".pptx,.pdf" required />
+                </div>
+
+                <div class="row g-4">
+                  <!-- Total questions -->
+                  <div class="col-md-6">
+                    <label class="form-label">Total questions <span class="text-secondary">(max 50 due to token limitations)</span></label>
+                    <div class="d-flex align-items-center gap-3">
+                      <input id="q-total" class="form-range flex-grow-1" type="range" min="5" max="50" step="1" value="20" />
+                      <input id="q-total-num" class="form-control" type="number" min="1" max="50" value="20" style="width:110px" />
+                    </div>
+                  </div>
+
+                  <!-- Difficulty -->
+                  <div class="col-md-6">
+                    <label class="form-label">Difficulty</label>
+                    <div class="btn-group d-flex" role="group">
+                      <input type="radio" class="btn-check" name="difficulty" id="d1" value="easy">
+                      <label class="btn btn-outline-secondary" for="d1">easy</label>
+
+                      <input type="radio" class="btn-check" name="difficulty" id="d2" value="medium">
+                      <label class="btn btn-outline-secondary" for="d2">medium</label>
+
+                      <input type="radio" class="btn-check" name="difficulty" id="d3" value="hard">
+                      <label class="btn btn-outline-secondary" for="d3">hard</label>
+
+                      <input type="radio" class="btn-check" name="difficulty" id="d4" value="mixed" checked>
+                      <label class="btn btn-outline-secondary" for="d4">mixed</label>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Mix mode -->
+                <div class="mb-3 mt-3">
+                  <label class="form-label">Question mix</label>
+                  <div class="btn-group" role="group">
+                    <input type="radio" class="btn-check" name="mix_mode" id="m1" value="auto" checked>
+                    <label class="btn btn-outline-primary" for="m1">auto</label>
+
+                    <input type="radio" class="btn-check" name="mix_mode" id="m2" value="balanced">
+                    <label class="btn btn-outline-primary" for="m2">balanced</label>
+
+                    <input type="radio" class="btn-check" name="mix_mode" id="m3" value="custom">
+                    <label class="btn btn-outline-primary" for="m3">custom</label>
+                  </div>
+                </div>
+
+                <!-- Custom counts -->
+                <div id="custom-box" class="row g-3 d-none">
+                  <div class="col-md-3">
+                    <label class="form-label">MCQ</label>
+                    <input class="form-control" type="number" name="mcq_n" min="0" max="100" value="10">
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label">Theory</label>
+                    <input class="form-control" type="number" name="theory_n" min="0" max="100" value="6">
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label">Code-fill</label>
+                    <input class="form-control" type="number" name="codefill_n" min="0" max="100" value="4">
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label">Fill-blank</label>
+                    <input class="form-control" type="number" name="fillblank_n" min="0" max="100" value="0">
+                  </div>
+                  <div class="col-12">
+                    <small id="custom-sum" class="text-secondary">Sum: 20</small>
+                  </div>
+                </div>
+
+                <!-- Options -->
+                <div class="form-check form-switch my-3">
+                  <input class="form-check-input" type="checkbox" id="exSwitch" name="include_explanations" checked>
+                  <label class="form-check-label" for="exSwitch">Include explanation slide after each answer</label>
+                </div>
+
+                <!-- API key (optional) -->
+                <div class="accordion mb-3" id="adv">
+                  <div class="accordion-item">
+                    <h2 class="accordion-header">
+                      <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#adv1">
+                        OpenAI API key (optional)
+                      </button>
+                    </h2>
+                    <div id="adv1" class="accordion-collapse collapse" data-bs-parent="#adv">
+                      <div class="accordion-body">
+                        <input class="form-control" type="password" name="OpenAI_api_key" placeholder="Prefer backend .env">
+                        <small class="text-secondary">Leave empty to use the backend <code>OpenAI_API_KEY</code>.</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Progress -->
+                <div id="progressWrap" class="progress mb-3 d-none" role="progressbar" aria-label="Generation progress" aria-valuemin="0" aria-valuemax="100">
+                  <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%"></div>
+                </div>
+
+                <!-- Status -->
+                <div id="statusAlert" class="alert d-none" role="alert"></div>
+
+                <!-- Actions -->
+                <div class="d-flex align-items-center gap-3">
+                  <button type="submit" id="submit-btn" class="btn btn-primary px-4">Generate deck</button>
+                  <div id="download"></div>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- CONTACT SECTION -->
+  <section class="contact-section text-center">
+    <div class="container">
+      <h5 class="mb-3">Found an issue or have feedback?</h5>
+      <a href="https://www.linkedin.com/in/ngyuhang/" target="_blank" rel="noopener noreferrer" class="d-inline-flex align-items-center btn btn-outline-primary px-3 py-2">
+        <svg xmlns="http://www.w3.org/2000/svg" class="linkedin-logo" fill="currentColor" viewBox="0 0 16 16">
+          <path d="M0 1.146C0 .513.526 0 1.175 0h13.65C15.474 0 16 .513 16 
+          1.146v13.708c0 .633-.526 1.146-1.175 
+          1.146H1.175C.526 16 0 15.487 0 
+          14.854V1.146zM4.943 13.5V6.169H2.542V13.5h2.401zm-1.2-8.258c.837 
+          0 1.358-.554 1.358-1.248-.015-.71-.52-1.248-1.342-1.248S2.4 
+          3.285 2.4 3.994c0 .694.52 1.248 1.327 
+          1.248h.016zm4.908 8.258V9.359c0-.221.016-.442.08-.599.176-.442.576-.9 
+          1.248-.9.881 0 1.233.678 1.233 
+          1.672V13.5h2.401V9.25c0-2.273-1.214-3.335-2.834-3.335-1.309 
+          0-1.898.725-2.227 1.233h.016v-1.05H8.651c.03.678 0 
+          7.402 0 7.402h2.401z"/>
+        </svg>
+        <span>Connect with me on LinkedIn</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- STICKY FOOTER -->
+  <footer class="border-top py-3 bg-white mt-auto">
+    <div class="container d-flex justify-content-between align-items-center">
+      <span class="text-secondary small">© <span id="year"></span> Quiz Deck © 2025 All rights reserved.</span>
+      <a class="small text-secondary" href="#generate">Back to top</a>
+    </div>
+  </footer>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+    // focus file input after smooth scroll
+    document.getElementById("get-started").addEventListener("click", () => {
+      setTimeout(() => document.getElementById("file-input").focus(), 450);
+    });
+  </script>
+  <script src="app.js"></script>
+</body>
+</html>
