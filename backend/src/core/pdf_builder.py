@@ -10,6 +10,10 @@ Resilient PDF builder for mock exam papers with uniform line sizing.
 - Only “unsquashes” when a line is pure letters with ZERO spaces (very safe).
 - Non-math $...$ / \(...\) print as text.
 - Multiple fallbacks; temp images cleaned after build.
+
+Small, targeted improvements:
+- Fractions render slightly taller for readability (still within 16pt leading).
+- Gentle punctuation de-stick for plain text lines (adds missing spaces in a few cases).
 """
 
 from typing import Optional, List, Union
@@ -57,7 +61,8 @@ USABLE_WIDTH = A4[0] - LEFT_MARGIN - RIGHT_MARGIN
 # Typography (UNIFORM)
 BASE_FONTSIZE = 12
 BASE_LEADING  = 16
-MATH_IMG_H    = 12                  # inline/block math height (pt)
+MATH_IMG_H    = 12                 # default inline/block math height (pt)
+MATH_IMG_H_FRAC = 14               # slightly taller for fractions (<= BASE_LEADING)
 
 # ---------------- Palette ----------------
 ACCENT = colors.HexColor("#1f7aed")
@@ -106,6 +111,7 @@ def _header(canvas, doc, title: str):
 # ---------------- Math handling ----------------
 INLINE_RE      = re.compile(r"(?:\\\((.*?)\\\)|\$(.+?)\$)")
 BLOCK_LINE_RE  = re.compile(r"^(?:\\\[(.*?)\\\]|\$\$(.+?)\$\$|\$(.+)\$)$")
+_FRACISH_RE    = re.compile(r"(\\(?:d|t)?frac\b|\\over|\d+\s*/\s*[\da-zA-Z(])")  # detect fractions
 
 def _ocr_normalize(s: str) -> str:
     s = (s.replace("•", "\\cdot").replace("·", "\\cdot").replace("×", "\\cdot")
@@ -138,6 +144,9 @@ def _looks_like_real_math(expr: str) -> bool:
         except Exception: pass
     words = re.findall(r"[A-Za-z]{3,}", s)
     return len(words) <= 3
+
+def _is_frac(expr: str) -> bool:
+    return bool(_FRACISH_RE.search(expr))
 
 _TEMP_IMAGES: List[str] = []
 
@@ -176,11 +185,13 @@ def _img_tag_fit(path: str, base_height_pt: float, max_width_pt: float, shrink_x
 
 def _inline_img_tag(expr: str) -> str:
     path = _render_math_file(expr)
-    return _img_tag_fit(path, base_height_pt=MATH_IMG_H, max_width_pt=USABLE_WIDTH*0.90, shrink_x=MATH_H_SHRINK)
+    base_h = MATH_IMG_H_FRAC if _is_frac(expr) else MATH_IMG_H
+    return _img_tag_fit(path, base_height_pt=base_h, max_width_pt=USABLE_WIDTH*0.90, shrink_x=MATH_H_SHRINK)
 
 def _block_math_paragraph(expr: str) -> Paragraph:
     path = _render_math_file(expr)
-    img  = _img_tag_fit(path, base_height_pt=MATH_IMG_H, max_width_pt=USABLE_WIDTH*0.96, shrink_x=MATH_H_SHRINK)
+    base_h = MATH_IMG_H_FRAC if _is_frac(expr) else MATH_IMG_H
+    img  = _img_tag_fit(path, base_height_pt=base_h, max_width_pt=USABLE_WIDTH*0.96, shrink_x=MATH_H_SHRINK)
     return Paragraph(f"<para align='center'>{img}</para>", style_body)
 
 
@@ -275,6 +286,19 @@ def _unsquash_safe(line: str) -> str:
         return s2
     return line
 
+# Gentle punctuation spacing for plain text (not math)
+def _fix_missing_punct_spaces(s: str) -> str:
+    # Add a space after comma/period only when both sides are letters (avoid 3.14 etc.)
+    s = re.sub(r'(?<=[A-Za-z]),(?=[A-Za-z])', ', ', s)
+    s = re.sub(r'(?<=[A-Za-z])\.(?=[A-Za-z])', '. ', s)
+    # Add a space after a closing parenthesis if stuck to a letter
+    s = re.sub(r'(?<=\))(?=[A-Za-z])', ' ', s)
+    # Add a space before an opening parenthesis stuck to a word
+    s = re.sub(r'(?<=[A-Za-z])\(', ' (', s)
+    # Collapse any doubles
+    s = re.sub(r'\s{2,}', ' ', s)
+    return s
+
 
 # ---------------- Build ----------------
 def build_mockpaper_pdf(
@@ -337,8 +361,9 @@ def build_mockpaper_pdf(
             story.append(_block_math_paragraph(line))
             continue
 
-        # Default text
-        story.append(Paragraph(_unsquash_safe(line), style_body))
+        # Default text (with gentle punctuation fix + safe unsquash)
+        clean = _fix_missing_punct_spaces(_unsquash_safe(line))
+        story.append(Paragraph(clean, style_body))
 
     out = Path(out_path); out.parent.mkdir(parents=True, exist_ok=True)
     doc = SimpleDocTemplate(
