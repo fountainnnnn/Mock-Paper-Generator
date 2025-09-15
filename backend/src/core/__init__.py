@@ -15,7 +15,6 @@ from .mock_upload import (
 # ---- LLM mock paper generation ----
 from .llm_mockgen import (
     configure_openai,
-    build_mockpaper_prompt,
     generate_mock_papers,
 )
 
@@ -32,7 +31,7 @@ __all__ = [
     # upload / ocr
     "papers_to_clean_text",
     # llm mockgen
-    "configure_openai", "build_mockpaper_prompt", "generate_mock_papers",
+    "configure_openai", "generate_mock_papers",
     # pdf export
     "build_mockpaper_pdf",
     # pipeline

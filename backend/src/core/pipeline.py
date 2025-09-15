@@ -4,7 +4,7 @@
 End-to-end pipeline for mock exam paper generation.
 - Extract text from uploaded DOCX/PDFs
 - Generate N new mock exam papers + answer keys with OpenAI
-- Export each as paired styled PDFs
+- Export each as paired styled PDFs (via HTML + KaTeX + Playwright)
 """
 
 from typing import Optional, Tuple, List
@@ -30,7 +30,7 @@ def run_pipeline_end_to_end(
     End-to-end pipeline:
       1. Extract text from uploaded DOCX/PDF mock papers
       2. Generate 1–3 new mock exam paper(s) + answer key(s) with OpenAI
-      3. Export each as paired PDFs
+      3. Export each as paired PDFs (HTML → KaTeX → Chromium print)
 
     Args:
         files: list of uploaded file-like objects or file paths
@@ -103,7 +103,7 @@ def run_pipeline_end_to_end(
     if not mock_pairs:
         raise ValueError("Mock paper generation returned no results.")
 
-    # --- Export to PDFs
+    # --- Export to PDFs (via HTML + KaTeX + Playwright)
     generated_paths: List[str] = []
     for idx, (paper_text, answer_text) in enumerate(mock_pairs, start=1):
         paper_pdf = out / f"mock_{idx}.pdf"

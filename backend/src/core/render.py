@@ -1,16 +1,16 @@
-# backend/src/core/rasterizer.py
+# backend/src/core/render.py
 # -*- coding: utf-8 -*-
 """
-Rasterization utilities for exam papers.
+Rendering utilities for exam papers.
 - PDF → PNG per page (for OCR on scanned math/printed papers)
-- DOCX → PDF → PNG (optional, requires docx2pdf on Windows/macOS)
+- DOCX → PDF → PNG (optional, requires docx2pdf on Windows/macOS or LibreOffice on Linux)
 """
 
 from __future__ import annotations
 from pathlib import Path
 from typing import List
-import sys
 import subprocess
+import shutil
 
 
 # ---------------------------

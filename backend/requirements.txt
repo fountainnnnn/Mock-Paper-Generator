@@ -30,3 +30,14 @@ google-auth==2.40.3
 google-auth-httplib2==0.2.0
 googleapis-common-protos==1.70.0
 protobuf==3.20.2
+
+# HTML rendering / Markdown → HTML → KaTeX
+jinja2==3.1.4
+markdown-it-py==3.0.0
+mdit-py-plugins==0.4.0
+
+# Headless browser for high-quality PDF printing
+playwright==1.47.0
+
+# Optional LaTeX parsing (used only for light validation)
+sympy==1.13.2

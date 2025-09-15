@@ -111,6 +111,23 @@ def _extract_text_from_docx(path: str) -> str:
     return "\n".join(paras)
 
 
+import re
+
+_HARD_WRAP = re.compile(r"(?<=\S)-\s*\n(?=\S)")  # e.g., "com-\npute" -> "compute"
+_LINE_SP   = re.compile(r"[ \t]+\n")             # trailing spaces before newline
+_MULTI_NL  = re.compile(r"\n{3,}")               # collapse >2 blank lines
+
+def _dehyphenate(s: str) -> str:
+    # join hyphenated line breaks *only* when there's no space around the break
+    return _HARD_WRAP.sub("", s)
+
+def _normalize_ws(s: str) -> str:
+    # trim trailing spaces at line ends, and keep paragraph breaks tidy
+    s = _LINE_SP.sub("\n", s)
+    s = _MULTI_NL.sub("\n\n", s)
+    return s.strip()
+
+
 # =========================
 # Public API
 # =========================
