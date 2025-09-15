@@ -1,434 +1,398 @@
-# backend/src/core/openai_qg.py
-from __future__ import annotations
+# backend/src/core/pdf_builder.py
+# -*- coding: utf-8 -*-
+"""
+ReportLab-only PDF builder for mock exam papers with stitched LaTeX math.
 
-import json
-import os
-import re
-from typing import Any, Dict, List, Optional, Tuple
+- Coalesces multi-line math blocks (\[...\], \(...\), $$...$$).
+- Renders LaTeX math as baseline-aligned images (matplotlib).
+- OCR normalization (• · × − → LaTeX-safe).
+- Styles for sections, questions, answers, marks.
+- MCQ options a./b./c./d. are printed on one line.
+"""
 
-from openai import OpenAI
-from pydantic import BaseModel, Field, ValidationError, RootModel, field_validator
+from typing import Optional, List, Union
+from pathlib import Path
+import re, io
 
-OPENAI_DEFAULT_MODEL = "gpt-4o-mini"
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, PageBreak,
+    Flowable, Image
+)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_LEFT, TA_CENTER
+from reportlab.lib import colors
 
-
-# ============================================================
-# OpenAI configuration
-# ============================================================
-def configure_openai(api_key: Optional[str] = None) -> OpenAI:
-    """
-    Configure OpenAI client with a required API key.
-    """
-    key = (api_key or os.environ.get("OPENAI_API_KEY") or "").strip()
-    if not key:
-        raise RuntimeError(
-            "OpenAI API key not found. Set OPENAI_API_KEY or pass api_key=..."
-        )
-    return OpenAI(api_key=key)
-
-
-# ============================================================
-# Structured output schema (local, lightweight)
-# ============================================================
-class Asset(BaseModel):
-    """Non-text assets the renderer can fetch/generate later (e.g., images)."""
-    question_id: str = Field(..., description="ID of the question this asset belongs to")
-    kind: str = Field("image", description="Currently only 'image' is supported")
-    prompt: str = Field(..., description="Short, precise prompt for the asset generator")
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 
-class Question(BaseModel):
-    """
-    A single question in the spec.
-    - text: markdown with LaTeX (inline \( ... \) and block \[ ... \]).
-    - type: 'free' | 'mcq' | 'short' | 'proof' | 'calc' (freeform; renderer won't rely on it too much).
-    - options: only for MCQ; exactly 4 items if present.
-    - correct: for MCQ: 'A'|'B'|'C'|'D' or 0..3
-    """
-    id: str
-    type: str = "free"
-    marks: Optional[int] = None
-    text: str
+# ---------------- Layout constants ----------------
+LEFT_MARGIN  = 56
+RIGHT_MARGIN = 56
+TOP_MARGIN   = 64
+BOTTOM_MARGIN= 64
+BASE_FONTSIZE = 12
+BASE_LEADING  = 16
 
-    options: Optional[List[str]] = None
-    correct: Optional[str | int] = None
+# ---------------- Palette ----------------
+ACCENT         = colors.HexColor("#1a3d7c")
+SECTION        = colors.HexColor("#4d2c91")
+OK_GREEN       = colors.HexColor("#1e9e62")
+SOFT_GREY      = colors.HexColor("#555555")
+HAIRLINE       = colors.HexColor("#DDDDDD")
+LIGHT_GREEN_BG = colors.HexColor("#e6f9f0")
+LIGHT_BLUE_BG  = colors.HexColor("#eef3ff")
+LIGHT_BOX_BG   = colors.HexColor("#fafafa")
 
-    # Optional assets tied to this question (usually images)
-    assets: Optional[List[Asset]] = None
+# ---------------- Styles ----------------
+styles = getSampleStyleSheet()
 
-    @field_validator("options", mode="before")
-    def _strip_empty_options(cls, v):
-        if not v:
-            return v
-        v2 = [str(x).strip() for x in v if str(x).strip()]
-        return v2 or None
-
-
-class Section(BaseModel):
-    title: str
-    questions: List[Question]
-
-
-class AnswerItem(BaseModel):
-    """Answer key entry."""
-    id: str
-    answer: str
-    workings: Optional[str] = None  # markdown / LaTeX friendly
-
-
-class MockSpec(BaseModel):
-    """One complete mock exam + its key."""
-    title: str = "Mock Exam Paper"
-    instructions: Optional[str] = None
-    sections: List[Section]
-    answer_key: List[AnswerItem] = Field(default_factory=list)
-    assets: List[Asset] = Field(default_factory=list)
-
-    # convenience: map question IDs -> section index, etc. (not serialized)
-    def _qid_set(self) -> set[str]:
-        return {q.id for s in self.sections for q in s.questions}
-
-    @field_validator("answer_key")
-    def _answers_refer_to_existing_qids(cls, v, values):
-        qids = set()
-        try:
-            sections = values.get("sections") or []
-            for s in sections:
-                for q in s.questions:
-                    qids.add(q.id)
-        except Exception:
-            pass
-        # Do not be strict; we just keep entries that reference valid IDs
-        if qids and v:
-            keep = [a for a in v if a.id in qids]
-            return keep
-        return v
-
-
-class MockSet(RootModel):
-    """Top-level payload from the model."""
-    root: Dict[str, List[MockSpec]]  # {"mocks": [MockSpec, ...]}
-
-    @property
-    def mocks(self) -> List[MockSpec]:
-        return self.root.get("mocks", [])
-
-
-# ============================================================
-# Prompting
-# ============================================================
-MOCKPAPER_SYSTEM = (
-    "You are an expert university exam paper generator and formatter. "
-    "You output STRICT JSON for each mock exam. "
-    "Never include extra commentary, code fences, or explanations—only JSON."
+style_cover_title = ParagraphStyle(
+    "CoverTitle",
+    parent=styles["Title"],
+    fontName="Helvetica-Bold",
+    fontSize=26,
+    leading=32,
+    alignment=TA_LEFT,
+    textColor=ACCENT,
+    spaceAfter=12,
 )
 
-def _difficulty_guidance(difficulty: str) -> str:
-    d = (difficulty or "same").strip().lower()
-    if d in {"same", "similar", "default"}:
-        return "Keep difficulty the SAME as the reference."
-    if d in {"easier", "easy"}:
-        return "Make the paper EASIER: simpler numbers, fewer steps, guided wording."
-    if d in {"harder", "hard"}:
-        return "Make the paper HARDER: multi-step reasoning, less guidance, and careful distractors."
-    return f"Adjust difficulty: {difficulty}."
+style_cover_sub = ParagraphStyle(
+    "CoverSub",
+    parent=styles["Normal"],
+    fontName="Helvetica-Oblique",
+    fontSize=12,
+    leading=16,
+    alignment=TA_LEFT,
+    textColor=SOFT_GREY,
+    spaceAfter=10,
+)
+
+style_instr_head = ParagraphStyle(
+    "InstrHead",
+    parent=styles["Normal"],
+    fontName="Helvetica-Bold",
+    fontSize=12,
+    leading=16,
+    textColor=SECTION,
+    spaceAfter=4,
+)
+
+style_instr_body = ParagraphStyle(
+    "InstrBody",
+    parent=styles["Normal"],
+    fontName="Helvetica",
+    fontSize=11.5,
+    leading=16,
+    textColor=colors.black,
+    backColor=LIGHT_BOX_BG,
+    spaceBefore=2,
+    spaceAfter=10,
+    leftIndent=6,
+    rightIndent=6,
+)
+
+style_body = ParagraphStyle(
+    "Body",
+    parent=styles["Normal"],
+    fontName="Helvetica",
+    fontSize=BASE_FONTSIZE,
+    leading=BASE_LEADING,
+    spaceBefore=0,
+    spaceAfter=6,
+)
+
+style_question = ParagraphStyle(
+    "Question",
+    parent=style_body,
+    fontName="Helvetica-Bold",
+    spaceBefore=8,
+    spaceAfter=4,
+)
+
+style_option = ParagraphStyle(
+    "Option",
+    parent=style_body,
+    leftIndent=18,
+    spaceBefore=0,
+    spaceAfter=2,
+)
+
+style_answer = ParagraphStyle(
+    "Answer",
+    parent=style_body,
+    leftIndent=10,
+    backColor=LIGHT_GREEN_BG,
+    textColor=OK_GREEN,
+    spaceBefore=4,
+    spaceAfter=8,
+)
+
+style_marks = ParagraphStyle(
+    "Marks",
+    parent=style_body,
+    alignment=TA_LEFT,
+    textColor=ACCENT,
+    backColor=LIGHT_BLUE_BG,
+    spaceBefore=4,
+    spaceAfter=8,
+    leftIndent=6,
+    rightIndent=6,
+)
+
+style_section = ParagraphStyle(
+    "SectionHeader",
+    parent=style_body,
+    fontName="Helvetica-Bold",
+    fontSize=15,
+    leading=20,
+    textColor=SECTION,
+    spaceBefore=12,
+    spaceAfter=8,
+)
+
+style_blockmath = ParagraphStyle(
+    "BlockMath",
+    parent=style_body,
+    alignment=TA_CENTER,
+    spaceBefore=6,
+    spaceAfter=6,
+)
+
+# ---------------- Footer & Header ----------------
+def _footer(canvas, doc):
+    canvas.saveState()
+    canvas.setStrokeColor(HAIRLINE)
+    canvas.setLineWidth(0.5)
+    canvas.line(LEFT_MARGIN, 52, A4[0]-RIGHT_MARGIN, 52)
+    canvas.setFont("Helvetica", 9)
+    canvas.setFillColor(colors.black)
+    canvas.drawString(LEFT_MARGIN, 40, "Mock Paper Generator")
+    canvas.drawRightString(A4[0]-RIGHT_MARGIN, 40, f"Page {doc.page}")
+    canvas.restoreState()
+
+def _header(canvas, doc, title: str):
+    canvas.saveState()
+    canvas.setFillColor(ACCENT)
+    canvas.setFont("Helvetica-Bold", 10.5)
+    canvas.drawString(LEFT_MARGIN, A4[1]-42, title)
+    canvas.setStrokeColor(ACCENT)
+    canvas.setLineWidth(2)
+    canvas.line(LEFT_MARGIN, A4[1]-46, A4[0]-RIGHT_MARGIN, A4[1]-46)
+    canvas.restoreState()
 
 
-def build_structured_prompt(paper_text: str, difficulty: str, num_mocks: int) -> str:
+# ---------------- Helpers ----------------
+def _ocr_normalize(s: str) -> str:
+    return (s.replace("•", "\\cdot").replace("·", "\\cdot").replace("×", "\\cdot")
+              .replace("−", "-").replace("–", "-").replace("—", "-")
+              .replace("⁄", "/").replace("°", "^{\\circ}"))
+
+# Inline math: \( ... \) or $...$
+INLINE_RE = re.compile(r"(?:\\\((.*?)\\\)|\$(.+?)\$)")
+# Block math: \[ ... \] or $$ ... $$  — must fill whole line after trimming
+BLOCK_LINE_RE = re.compile(r"^\s*(?:\\\[(.*?)\\\]|\$\$(.+?)\$\$)\s*$")
+
+def _sanitize_math(expr: str) -> str:
+    expr = expr.strip()
+    # be forgiving: users sometimes include delimiters inside captures
+    if expr.startswith("\\(") and expr.endswith("\\)"):
+        expr = expr[2:-2].strip()
+    if expr.startswith("\\[") and expr.endswith("\\]"):
+        expr = expr[2:-2].strip()
+    if expr.startswith("$") and expr.endswith("$"):
+        expr = expr[1:-1].strip()
+    # % must be escaped for mathtext
+    expr = expr.replace("%", r"\%")
+    # \text{...} is not fully supported by mathtext; map to \mathrm{...}
+    expr = re.sub(r"\\text\{([^}]*)\}", r"\\mathrm{\1}", expr)
+    return _ocr_normalize(expr)
+
+def _render_math(expr: str, fontsize: int = 12, height: int = 14) -> Image:
+    fig = plt.figure(figsize=(0.01, 0.01))
+    fig.text(0, 0, f"${expr}$", fontsize=fontsize)
+    buf = io.BytesIO()
+    plt.axis("off")
+    plt.savefig(buf, format="png", bbox_inches="tight", pad_inches=0.05,
+                dpi=300, transparent=True)
+    plt.close(fig)
+    buf.seek(0)
+    return Image(buf, height=height, kind="proportional")
+
+
+# --------- Coalesce multi-line math blocks ----------
+def _stitch_broken_math_lines(lines: List[str]) -> List[str]:
     """
-    Ask for a structured JSON spec (mocks array).
-    - Math must use \( ... \) for inline and \[ ... \] for block.
-    - MCQ must have 4 options, labeled implicitly A-D by order.
-    - Assets: supply image prompts only when beneficial (diagrams, plots).
+    Joins lines when a LaTeX span starts on one line and ends on a later line.
+    Handles: \( ... \), \[ ... \], $$ ... $$
     """
-    return f"""
-You must return a single JSON object of the form:
+    out: List[str] = []
+    buf: List[str] = []
+    mode = None  # "inline_paren" | "block_bracket" | "block_dollar"
 
-{{
-  "mocks": [
-    {{
-      "title": "string",
-      "instructions": "string (optional)",
-      "sections": [
-        {{
-          "title": "string",
-          "questions": [
-            {{
-              "id": "q1",
-              "type": "free|mcq|short|proof|calc",
-              "marks": 10,
-              "text": "Markdown with LaTeX (inline \\( ... \\), block \\[ ... \\)). For MCQ, write the stem here, not the options.",
-              "options": ["A", "B", "C", "D"],   // required for type 'mcq' (exactly 4)
-              "correct": "A",                    // 'A'|'B'|'C'|'D' or 0..3 for 'mcq'; omit otherwise
-              "assets": [                        // optional; include only when a diagram/plot helps
-                 {{"question_id":"q1","kind":"image","prompt":"clean, high-contrast line diagram of ..."}}
-              ]
-            }}
-          ]
-        }}
-      ],
-      "answer_key": [
-        {{
-          "id": "q1",
-          "answer": "Final answer as text/LaTeX.",
-          "workings": "Optional derivation/justification in Markdown+LaTeX."
-        }}
-      ],
-      "assets": [] // optional global assets (usually leave empty; prefer question.assets)
-    }}
-  ]
-}}
+    def opens(s: str) -> Optional[str]:
+        if "\\(" in s and "\\)" not in s:
+            return "inline_paren"
+        if "\\[" in s and "\\]" not in s:
+            return "block_bracket"
+        # $$ span start (odd number of $$ across the line = open)
+        if s.count("$$") == 1:
+            return "block_dollar"
+        return None
 
-Hard requirements:
-- Produce exactly {num_mocks} mocks.
-- Preserve number of sections, ordering, and approximate topical coverage of the reference.
-- Keep marks labels and numbering ONLY if present in the reference; otherwise create clear IDs 'q1', 'q2', ...
-- For MCQ: always 4 options; make distractors plausible and non-trivial. Put the correct label in 'correct'.
-- Use LaTeX \( ... \) and \[ ... \] for math. Do not leak raw dollar signs.
-- DO NOT include any headers/footers/page numbers/copyright.
-- JSON ONLY—no backticks, no prose.
+    def closes(s: str, m: str) -> bool:
+        if m == "inline_paren":
+            return "\\)" in s
+        if m == "block_bracket":
+            return "\\]" in s
+        if m == "block_dollar":
+            return s.count("$$") == 1
+        return False
 
-Difficulty:
-{_difficulty_guidance(difficulty)}
-
-Short reference excerpt (<=12k chars):
-{paper_text[:12000]}
-""".strip()
+    for raw in lines:
+        s = raw.rstrip()
+        if mode is None:
+            m = opens(s)
+            if m:
+                mode = m
+                buf = [s]
+            else:
+                out.append(s)
+        else:
+            buf.append(s)
+            if closes(s, mode):
+                out.append(" ".join(buf))  # join with a space to avoid word-glue
+                buf = []
+                mode = None
+    # flush if unterminated (best effort)
+    if buf:
+        out.append(" ".join(buf))
+    return out
 
 
-# ============================================================
-# Helpers for robust JSON extraction
-# ============================================================
-_JSON_OBJECT_RE = re.compile(r"\{.*\}", re.S)
+# ---------------- Build ----------------
+def build_mockpaper_pdf(
+    text: str,
+    out_path: str,
+    title: str = "Generated Mock Exam Paper",
+    source_name: Optional[str] = None,
+    is_answer_key: bool = False,
+):
+    raw_lines = text.replace("\r\n", "\n").replace("\r", "\n").splitlines()
+    raw_lines = [_ocr_normalize(s) for s in raw_lines]
+    # stitch broken \( ... \), \[ ... \], $$ ... $$ across line breaks
+    lines = _stitch_broken_math_lines(raw_lines)
 
-def _extract_json(s: str) -> str:
-    """
-    Extract the first {...} JSON object from a string. Tolerant of model adding prose.
-    """
-    # Remove code fences if present
-    s2 = s.strip()
-    if s2.startswith("```"):
-        s2 = re.sub(r"^```[a-zA-Z]*\n?", "", s2)
-        s2 = s2.rstrip("`").rstrip()
-    m = _JSON_OBJECT_RE.search(s2)
-    if m:
-        return m.group(0)
-    return s2  # last resort
+    story: List[Union[Flowable, Paragraph]] = []
 
+    # --- Cover ---
+    story.append(Spacer(1, 22))
+    story.append(Paragraph(title, style_cover_title))
+    if source_name:
+        story.append(Paragraph(source_name, style_cover_sub))
+    story.append(Paragraph("Instructions", style_instr_head))
+    story.append(Paragraph(
+        "Answer all questions. Show full working. Round off appropriately.",
+        style_instr_body
+    ))
+    story.append(PageBreak())
 
-def _json_loads_safe(s: str) -> Dict[str, Any]:
-    try:
-        return json.loads(s)
-    except Exception:
-        # extremely defensive: try to strip trailing commas and retry
-        s2 = re.sub(r",\s*([}\]])", r"\1", s)
-        return json.loads(s2)
+    # --- Body ---
+    i = 0
+    q_counter = 0
+    while i < len(lines):
+        line = lines[i].strip()
 
+        if not line:
+            story.append(Spacer(1, 8))
+            i += 1
+            continue
 
-# ============================================================
-# Public: Structured generation
-# ============================================================
-def generate_mock_specs(
-    paper_text: str,
-    difficulty: str = "same",
-    num_mocks: int = 1,
-    model_name: str = OPENAI_DEFAULT_MODEL,
-    api_key: Optional[str] = None,
-) -> List[Dict[str, Any]]:
-    """
-    Generate mocks as structured JSON specs (list of dicts, validated).
-    Each dict conforms to MockSpec (title, sections[], answer_key[], assets[]).
+        # Section headers
+        if re.match(r"^\s*\d+\.\s*[A-Za-z]", line) and not line.lower().startswith(("q", "q1", "q2")):
+            # e.g. "1. Differentiation and Tangents"
+            story.append(Spacer(1, 6))
+            story.append(Paragraph(line, style_section))
+            i += 1
+            continue
 
-    Returns: List[Dict] with len == num_mocks
-    """
-    num_mocks = max(1, min(num_mocks, 3))
-    client = configure_openai(api_key)
-    prompt = build_structured_prompt(paper_text, difficulty, num_mocks)
+        # Numbered questions: "q1.", "1.", "(1)", "Q1"
+        if re.match(r"^\s*(?:q\s*\d+|\(?\d+\)?[.)])", line, flags=re.I):
+            q_counter += 1
+            story.append(Paragraph(line, style_question))
+            i += 1
+            continue
 
-    # Ask for JSON directly
-    resp = client.chat.completions.create(
-        model=model_name,
-        messages=[
-            {"role": "system", "content": MOCKPAPER_SYSTEM},
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0.7,
-        response_format={"type": "json_object"},
+        # MCQ options a./b./c./d. on one line
+        if re.match(r"^[a-d]\.", line, flags=re.I):
+            options = [line.strip()]
+            j = i + 1
+            while j < len(lines) and re.match(r"^[a-d]\.", lines[j].strip(), flags=re.I):
+                options.append(lines[j].strip())
+                j += 1
+            story.append(Paragraph("    ".join(options), style_option))
+            i = j
+            continue
+
+        # Marks
+        if "mark" in line.lower():
+            story.append(Paragraph(line, style_marks))
+            i += 1
+            continue
+
+        # Answers page
+        if is_answer_key and line.lower().startswith(("answer", "ans:", "solution")):
+            story.append(Paragraph(line, style_answer))
+            i += 1
+            continue
+
+        # Full-line block math
+        m_block = BLOCK_LINE_RE.match(line)
+        if m_block:
+            expr = next(g for g in m_block.groups() if g)
+            try:
+                story.append(_render_math(_sanitize_math(expr), fontsize=14, height=22))
+            except Exception:
+                story.append(Paragraph(line, style_blockmath))
+            i += 1
+            continue
+
+        # Inline math within text
+        parts: List[Flowable] = []
+        pos = 0
+        for m in INLINE_RE.finditer(line):
+            if m.start() > pos:
+                parts.append(Paragraph(line[pos:m.start()], style_body))
+            expr = next(g for g in m.groups() if g)
+            try:
+                parts.append(_render_math(_sanitize_math(expr)))
+            except Exception:
+                parts.append(Paragraph(expr, style_body))
+            pos = m.end()
+        if pos < len(line):
+            parts.append(Paragraph(line[pos:], style_body))
+        if parts:
+            story.extend(parts)
+        else:
+            story.append(Paragraph(line, style_body))
+        i += 1
+
+    # --- Build ---
+    out = Path(out_path); out.parent.mkdir(parents=True, exist_ok=True)
+    doc = SimpleDocTemplate(
+        str(out),
+        pagesize=A4,
+        topMargin=TOP_MARGIN, bottomMargin=BOTTOM_MARGIN,
+        leftMargin=LEFT_MARGIN, rightMargin=RIGHT_MARGIN
     )
 
-    raw = resp.choices[0].message.content.strip() if resp.choices else "{}"
-    try:
-        payload = _json_loads_safe(_extract_json(raw))
-    except Exception as e:
-        # If for any reason JSON mode errored or model leaked prose, raise a nice error
-        raise RuntimeError(f"Model did not return valid JSON: {e}\n--- RAW ---\n{raw[:800]}")
+    doc.build(
+        story,
+        onFirstPage=lambda c, d: (_header(c, d, title), _footer(c, d)),
+        onLaterPages=lambda c, d: (_header(c, d, title), _footer(c, d)),
+    )
 
-    try:
-        mockset = MockSet.model_validate(payload)
-    except ValidationError as ve:
-        # If validation fails, show a concise error and keep as much as possible
-        raise RuntimeError(f"Structured spec failed validation: {ve}") from ve
-
-    # Ensure count
-    mocks = list(mockset.mocks)
-    if len(mocks) < num_mocks:
-        # pad with empty mocks to keep API contract
-        while len(mocks) < num_mocks:
-            mocks.append(
-                MockSpec(sections=[Section(title="Section 1", questions=[])], answer_key=[])
-            )
-    return [m.model_dump() for m in mocks[:num_mocks]]
-
-
-# ============================================================
-# Back-compat: Flat text generator (paper, answers)
-# ============================================================
-LEGACY_SYSTEM = (
-    "You are an expert exam paper generator. Produce two parts: "
-    "first the exam paper (questions only), then the answer key (answers only). "
-    "Do not mix answers into the paper."
-)
-
-def _build_legacy_prompt(paper_text: str, difficulty: str, num_mocks: int) -> str:
-    return f"""
-{LEGACY_SYSTEM}
-
-Constraints to PRESERVE:
-1. Keep the SAME number of sections and order as the reference.
-2. Keep section headers verbatim.
-3. Keep the SAME number of questions per section, and numbering style ONLY if present in the reference.
-4. Preserve marks labels if present.
-5. Preserve formatting (line breaks, math style, bullets).
-6. Only include invigilator instructions if they appear in the reference.
-7. DO NOT add page numbers, footers, headers, copyrights, or boilerplate.
-
-Required variations:
-- Change wording, numbers, datasets, constants, but keep topic and syllabus.
-- Do NOT copy text verbatim.
-- For MCQ: always 4 options (A)–(D).
-- Answers ONLY in the answer key.
-
-Difficulty:
-{_difficulty_guidance(difficulty)}
-
-Output format (STRICT):
-For each of {num_mocks} mock exams:
-### MOCK PAPER X
-<full exam text, questions only>
-### ANSWER KEY X
-<full answer key text, answers only>
-
-Reference exam (first 12k chars shown):
-{paper_text[:12000]}
-""".strip()
-
-
-def _render_spec_to_text(spec: Dict[str, Any]) -> Tuple[str, str]:
-    """
-    Convert one structured spec to (paper_text, answer_key_text).
-    - Paper: sections with questions (MCQ options shown as (A)-(D)).
-    - Answer key: list id: answer (plus workings).
-    """
-    m = MockSpec.model_validate(spec)
-
-    paper_lines: List[str] = []
-    if m.title:
-        paper_lines.append(m.title)
-        paper_lines.append("")
-    if m.instructions:
-        paper_lines.append(m.instructions)
-        paper_lines.append("")
-
-    for s_idx, sec in enumerate(m.sections, start=1):
-        paper_lines.append(f"{s_idx}. {sec.title}")
-        for q in sec.questions:
-            marks_str = f" ({q.marks} marks)" if q.marks else ""
-            paper_lines.append(f"{q.id}. {q.text}{marks_str}")
-            if q.options:
-                labels = ["A", "B", "C", "D"]
-                for i, opt in enumerate(q.options[:4]):
-                    paper_lines.append(f"    ({labels[i]}) {opt}")
-            paper_lines.append("")
-        paper_lines.append("")
-
-    ans_lines: List[str] = []
-    ans_lines.append("Answer Key")
-    for a in m.answer_key:
-        ans_lines.append(f"{a.id}: {a.answer}")
-        if a.workings:
-            ans_lines.append(a.workings)
-        ans_lines.append("")
-
-    return "\n".join(paper_lines).strip(), "\n".join(ans_lines).strip()
-
-
-def generate_mock_papers(
-    paper_text: str,
-    difficulty: str = "same",
-    num_mocks: int = 1,
-    model_name: str = OPENAI_DEFAULT_MODEL,
-    api_key: Optional[str] = None,
-) -> List[Tuple[str, str]]:
-    """
-    Generate 1–3 new mock exam papers (with answers).
-    Returns a list of (paper_text, answer_key_text) tuples.
-
-    Implementation notes:
-    - First tries the structured JSON path (generate_mock_specs) for better MCQs/diagrams.
-    - If anything fails (network/validation), it falls back to the original plain-text prompt.
-    """
-    # Preferred structured path
-    try:
-        specs = generate_mock_specs(
-            paper_text=paper_text,
-            difficulty=difficulty,
-            num_mocks=num_mocks,
-            model_name=model_name,
-            api_key=api_key,
-        )
-        out: List[Tuple[str, str]] = []
-        for spec in specs:
-            out.append(_render_spec_to_text(spec))
-        return out
-    except Exception:
-        # Fallback to legacy plain text
-        client = configure_openai(api_key)
-        prompt = _build_legacy_prompt(paper_text, difficulty, num_mocks)
-
-        resp = client.chat.completions.create(
-            model=model_name,
-            messages=[{"role": "system", "content": LEGACY_SYSTEM},
-                      {"role": "user", "content": prompt}],
-            temperature=0.7,
-        )
-        raw = resp.choices[0].message.content.strip() if resp.choices else ""
-
-        outputs: List[Tuple[str, str]] = []
-        current_paper, current_answers = [], []
-        mode = None
-
-        for line in raw.splitlines():
-            tag = line.strip().lower()
-            if tag.startswith("### mock paper"):
-                if current_paper or current_answers:
-                    outputs.append(("\n".join(current_paper).strip(),
-                                    "\n".join(current_answers).strip()))
-                    current_paper, current_answers = [], []
-                mode = "paper"
-                continue
-            if tag.startswith("### answer key"):
-                mode = "answers"
-                continue
-
-            if mode == "paper":
-                current_paper.append(line)
-            elif mode == "answers":
-                current_answers.append(line)
-
-        if current_paper or current_answers:
-            outputs.append(("\n".join(current_paper).strip(),
-                            "\n".join(current_answers).strip()))
-
-        while len(outputs) < max(1, min(num_mocks, 3)):
-            outputs.append(("", ""))
-        return outputs[:num_mocks]
+    return str(out)

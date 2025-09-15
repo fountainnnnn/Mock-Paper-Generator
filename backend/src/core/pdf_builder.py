@@ -1,27 +1,18 @@
 # backend/src/core/pdf_builder.py
 # -*- coding: utf-8 -*-
 """
-ReportLab-only PDF builder for mock exam papers with a cleaner, colorful design.
+ReportLab-only PDF builder for mock exam papers (Unicode math mode).
 
-- Coalesces multi-line math blocks (\[...\], \(...\), $$...$$).
-- Renders math as baseline-aligned images (matplotlib), auto-fits width.
-- Conservative math-line stitcher prevents vertical stacks WITHOUT touching normal sentences.
-- OCR normalization (• · × − → LaTeX-safe); optional square→π disabled by default.
-- Only “unsquashes” when a line is pure letters with ZERO spaces (very safe).
-- Inline/block math handled: $...$, \(...\), \[...\], $$...$$
-- Gentle punctuation spacing fix for plain text lines.
-
-Design upgrades:
-- Left-aligned content (no “right-handed” feel).
-- Section headers with color accent.
-- Shaded answer boxes and marks badges.
-- More breathing room (consistent vertical rhythm).
-- Updated header/footer styling.
+- LaTeX-like math is converted to Unicode characters (², ₁, θ, π, ·, ×, …).
+- No rendering with matplotlib, everything stays as selectable text.
+- OCR normalization for basic symbols.
+- Styles for sections, questions, answers, marks.
+- MCQ options a./b./c./d. are printed on one line.
 """
 
 from typing import Optional, List, Union
 from pathlib import Path
-import os, re, tempfile
+import re
 
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import (
@@ -29,43 +20,16 @@ from reportlab.platypus import (
     Flowable
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_LEFT
+from reportlab.lib.enums import TA_LEFT, TA_CENTER
 from reportlab.lib import colors
-from reportlab.lib.utils import ImageReader
-
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-
-# Optional LaTeX sniff
-try:
-    from sympy.parsing.latex import parse_latex
-    HAS_SYMPY = True
-except Exception:
-    HAS_SYMPY = False
-
-
-# ---------------- TUNABLES ----------------
-JOIN_MATH_RUNS_MODE = "strict"     # "off" | "strict" | "loose"
-REQUIRE_OPERATOR_FOR_BLOCK = True
-NORMALIZE_SQUARE_TO_PI = False
-ENABLE_UNSQUASH_SAFE = True
-
-# Visual (math)
-MATH_H_SHRINK = 0.90
 
 # ---------------- Layout constants ----------------
 LEFT_MARGIN  = 56
 RIGHT_MARGIN = 56
 TOP_MARGIN   = 64
 BOTTOM_MARGIN= 64
-USABLE_WIDTH = A4[0] - LEFT_MARGIN - RIGHT_MARGIN
-
-# Typography
 BASE_FONTSIZE = 12
 BASE_LEADING  = 16
-MATH_IMG_H    = 12
-MATH_IMG_H_FRAC = 15
 
 # ---------------- Palette ----------------
 ACCENT         = colors.HexColor("#1a3d7c")
@@ -133,7 +97,7 @@ style_body = ParagraphStyle(
     fontSize=BASE_FONTSIZE,
     leading=BASE_LEADING,
     spaceBefore=0,
-    spaceAfter=6,   # extra breathing room
+    spaceAfter=6,
 )
 
 style_question = ParagraphStyle(
@@ -185,15 +149,13 @@ style_section = ParagraphStyle(
     spaceAfter=8,
 )
 
-style_smallmeta = ParagraphStyle(
-    "SmallMeta",
+style_blockmath = ParagraphStyle(
+    "BlockMath",
     parent=style_body,
-    fontName="Helvetica-Oblique",
-    fontSize=9.5,
-    leading=12,
-    textColor=SOFT_GREY,
+    alignment=TA_CENTER,
+    spaceBefore=6,
+    spaceAfter=6,
 )
-
 
 # ---------------- Footer & Header ----------------
 def _footer(canvas, doc):
@@ -217,54 +179,38 @@ def _header(canvas, doc, title: str):
     canvas.line(LEFT_MARGIN, A4[1]-46, A4[0]-RIGHT_MARGIN, A4[1]-46)
     canvas.restoreState()
 
-
-# ---------------- Math handling ----------------
-INLINE_RE       = re.compile(r"(?:\\\((.*?)\\\)|\$(.+?)\$)")
-BLOCK_LINE_RE   = re.compile(r"^(?:\\\[(.*?)\\\]|\$\$(.+?)\$\$|\$(.+)\$)$")
-INLINE_BLOCK_RE = re.compile(r"(\\\[(.+?)\\\]|\$\$(.+?)\$\$)")
-_FRACISH_RE     = re.compile(r"(\\(?:d|t)?frac\b|\\over|\d+\s*/\s*[\da-zA-Z(])")
-
+# ---------------- Helpers ----------------
 def _ocr_normalize(s: str) -> str:
-    s = (s.replace("•", "\\cdot").replace("·", "\\cdot").replace("×", "\\cdot")
-           .replace("−", "-").replace("–", "-").replace("—", "-")
-           .replace("⁄", "/").replace("°", "^{\\circ}"))
-    if NORMALIZE_SQUARE_TO_PI:
-        s = s.replace("■", "\\pi").replace("□", "\\pi")
-    return s
+    return (s.replace("•", "·").replace("·", "·").replace("×", "×")
+              .replace("−", "-").replace("–", "-").replace("—", "-")
+              .replace("⁄", "/").replace("°", "°"))
 
-def _sanitize_math(expr: str) -> str:
+# Inline math: \( ... \) or $...$
+INLINE_RE = re.compile(r"(?:\\\((.*?)\\\)|\$(.+?)\$)")
+# Block math: \[ ... \] or $$ ... $$  — must fill whole line
+BLOCK_LINE_RE = re.compile(r"^\s*(?:\\\[(.*?)\\\]|\$\$(.+?)\$\$)\s*$")
+
+_SUPERSCRIPT_MAP = str.maketrans("0123456789+-=()", "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾")
+_SUBSCRIPT_MAP   = str.maketrans("0123456789+-=()", "₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎")
+
+def latex_to_unicode(expr: str) -> str:
     expr = expr.strip()
-    if expr.startswith("$") and expr.endswith("$"):
-        expr = expr[1:-1].strip()
-    if expr.startswith("\\(") and expr.endswith("\\)"):
-        expr = expr[2:-2].strip()
+    # Remove math delimiters
+    expr = re.sub(r"^\$+|\$+$", "", expr)
+    expr = re.sub(r"^\\\(|\\\)$", "", expr)
+    expr = re.sub(r"^\\\[|\\\]$", "", expr)
 
-    # --- Fix: escape percent signs ---
-    expr = expr.replace("%", r"\%")
-    # --- Fix: wrap long words in \text{} ---
-    expr = re.sub(r"([A-Za-z]{3,})", r"\\text{\1}", expr)
+    # Replace common LaTeX tokens
+    expr = expr.replace("\\cdot", "·").replace("\\times", "×")
+    expr = expr.replace("\\theta", "θ").replace("\\pi", "π")
 
-    return _ocr_normalize(expr)
+    # Superscripts (^2 → ²)
+    expr = re.sub(r"\^(\d+|[+\-]?\d+)", lambda m: m.group(1).translate(_SUPERSCRIPT_MAP), expr)
 
-def _looks_like_real_math(expr: str) -> bool:
-    s = _ocr_normalize(expr.strip())
-    if not s:
-        return False
-    # too many words → treat as text
-    if len(re.findall(r"[A-Za-z]{3,}", s)) > 6:
-        return False
-    if any(tok in s for tok in ("\\frac","\\sqrt","\\pi","\\cdot","\\sum","\\int","\\lim",
-                                "\\sin","\\cos","\\tan","\\ln","\\log")): return True
-    if re.search(r"[_^]", s): return True
-    if re.search(r"[=+\-*/><]", s) and re.search(r"\d", s): return True
-    if HAS_SYMPY:
-        try: parse_latex(s); return True
-        except Exception: pass
-    return False
+    # Subscripts (_1 → ₁)
+    expr = re.sub(r"_(\d+|[+\-]?\d+)", lambda m: m.group(1).translate(_SUBSCRIPT_MAP), expr)
 
-
-# (… keep all other helper functions as in your last version …)
-
+    return expr
 
 # ---------------- Build ----------------
 def build_mockpaper_pdf(
@@ -272,11 +218,11 @@ def build_mockpaper_pdf(
     out_path: str,
     title: str = "Generated Mock Exam Paper",
     source_name: Optional[str] = None,
-    is_answer_key: bool = False
+    is_answer_key: bool = False,
 ):
     raw_lines = text.replace("\r\n", "\n").replace("\r", "\n").splitlines()
     raw_lines = [_ocr_normalize(s) for s in raw_lines]
-    lines     = [_ocr_normalize(s) for s in raw_lines]
+    lines = raw_lines  # no rendering, just text
 
     story: List[Union[Flowable, Paragraph]] = []
 
@@ -286,23 +232,81 @@ def build_mockpaper_pdf(
     if source_name:
         story.append(Paragraph(source_name, style_cover_sub))
     story.append(Paragraph("Instructions", style_instr_head))
-    story.append(Paragraph("Answer all questions. Show full working. Round off appropriately.", style_instr_body))
+    story.append(Paragraph(
+        "Answer all questions. Show full working. Round off appropriately.",
+        style_instr_body
+    ))
     story.append(PageBreak())
 
     # --- Body ---
-    for raw in lines:
-        line = raw.strip()
+    i = 0
+    q_counter = 0
+    while i < len(lines):
+        line = lines[i].strip()
+
         if not line:
             story.append(Spacer(1, 8))
+            i += 1
             continue
 
         # Section headers
-        if re.match(r"^\s*section\b", line, re.I):
+        if re.match(r"^\s*\d+\.\s*[A-Za-z]", line) and not line.lower().startswith(("q", "q1", "q2")):
             story.append(Spacer(1, 6))
             story.append(Paragraph(line, style_section))
+            i += 1
             continue
 
-        # (… body parsing same as before …)
+        # Numbered questions
+        if re.match(r"^\s*(?:q\s*\d+|\(?\d+\)?[.)])", line, flags=re.I):
+            q_counter += 1
+            story.append(Paragraph(line, style_question))
+            i += 1
+            continue
+
+        # MCQ options
+        if re.match(r"^[a-d]\.", line, flags=re.I):
+            options = [line.strip()]
+            j = i + 1
+            while j < len(lines) and re.match(r"^[a-d]\.", lines[j].strip(), flags=re.I):
+                options.append(lines[j].strip())
+                j += 1
+            story.append(Paragraph("    ".join(options), style_option))
+            i = j
+            continue
+
+        # Marks
+        if "mark" in line.lower():
+            story.append(Paragraph(line, style_marks))
+            i += 1
+            continue
+
+        # Answers
+        if is_answer_key and line.lower().startswith(("answer", "ans:", "solution")):
+            story.append(Paragraph(line, style_answer))
+            i += 1
+            continue
+
+        # Block math
+        m_block = BLOCK_LINE_RE.match(line)
+        if m_block:
+            expr = next(g for g in m_block.groups() if g)
+            story.append(Paragraph(latex_to_unicode(expr), style_blockmath))
+            i += 1
+            continue
+
+        # Inline math
+        if INLINE_RE.search(line):
+            new_line = line
+            for m in INLINE_RE.finditer(line):
+                expr = m.group(1) or m.group(2)
+                new_line = new_line.replace(m.group(0), latex_to_unicode(expr))
+            story.append(Paragraph(new_line, style_body))
+            i += 1
+            continue
+
+        # Fallback normal text
+        story.append(Paragraph(line, style_body))
+        i += 1
 
     # --- Build ---
     out = Path(out_path); out.parent.mkdir(parents=True, exist_ok=True)
