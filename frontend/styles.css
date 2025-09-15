@@ -1,39 +1,87 @@
-/* Pastel, light, minimal — override a few Bootstrap vars */
-:root {
-  --brand-hero: #f4f7ff;        /* soft indigo tint */
-  --brand-primary: #6f8bf6;     /* pastel indigo */
-  --brand-secondary: #6b7280;   /* slate */
+html { scroll-behavior: smooth; }
+
+/* Hero background gradient */
+.hero {
+  background: linear-gradient(135deg, #f3e8ff 0%, #ede9fe 50%, #faf5ff 100%);
 }
 
-/* Use a consistent soft palette */
+/* Primary buttons + progress bar with gradient */
 .btn-primary,
-.btn-outline-primary:hover,
-.btn-outline-primary:active,
-.btn-outline-primary:focus {
-  background-color: var(--brand-primary) !important;
-  border-color: var(--brand-primary) !important;
+.progress-bar {
+  background: linear-gradient(135deg, #6f42c1, #8b5cf6) !important;
+  border: none !important;
+  color: #fff !important;
+}
+.btn-primary:hover,
+.btn-primary:focus {
+  background: linear-gradient(135deg, #59359c, #7c3aed) !important;
+  color: #fff !important;
 }
 
-.text-primary { color: var(--brand-primary) !important; }
-.bg-hero { background: var(--brand-hero); }
-
-/* Make cards a bit softer */
-.card { border-color: #e9ecf5; }
-.border-bottom { border-color: #e9ecf5 !important; }
-.border-top { border-color: #e9ecf5 !important; }
-
-/* Inputs */
-.form-control,
-.form-select {
-  border-color: #dbe1f1;
+/* Navbar brand = purple text only */
+.navbar .navbar-brand {
+  color: #6f42c1 !important;
+  background: none !important;
+  border: none !important;
 }
 
-/* Keep things readable */
-body { color: #0f172a; background: #fafbff; }
-.lead, .text-secondary { color: #6b7280 !important; }
+/* Hero title = plain purple text */
+.hero-title {
+  color: #6f42c1 !important;
+  font-weight: 700;
+}
 
-/* Progress bar color align to brand */
-.progress-bar { background-color: var(--brand-primary); }
+/* Difficulty toggle active state in purple with gradient */
+.btn-check:checked + .btn-outline-secondary {
+  background: linear-gradient(135deg, #6f42c1, #8b5cf6) !important;
+  color: #fff !important;
+  border: none !important;
+}
 
-/* Small spacing tweaks */
-.hero .btn { box-shadow: 0 6px 18px rgba(111, 139, 246, 0.25); }
+/* Contact section */
+.contact-section {
+  background: linear-gradient(180deg, #f9fafb, #f3f4f6);
+  border-top: 1px solid #e5e7eb;
+  padding: 2rem 0;
+}
+.linkedin-logo {
+  width: 20px;
+  height: 20px;
+  margin-right: 6px;
+}
+
+/* LinkedIn button */
+.contact-section a.btn-outline-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  text-decoration: none;
+
+  padding: 0.375rem 0.75rem;   /* standard button size */
+  font-size: 1rem;
+  line-height: 1.5;
+  border-radius: 0.375rem;
+
+  color: #0a66c2 !important;
+  border-color: #0a66c2 !important;
+  background: transparent !important;
+}
+
+.contact-section a.btn-outline-primary span,
+.contact-section a.btn-outline-primary svg {
+  color: inherit !important;
+  fill: currentColor !important;
+}
+
+.contact-section a.btn-outline-primary:hover,
+.contact-section a.btn-outline-primary:focus {
+  background: linear-gradient(135deg, #0a66c2, #2563eb) !important;
+  color: #ffffff !important;
+  border-color: transparent !important;
+}
+
+/* Footer with gradient fade */
+footer {
+  background: linear-gradient(180deg, #ffffff 0%, #f9fafb 100%);
+}

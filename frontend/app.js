@@ -1,53 +1,19 @@
 // Backend origin (override with ?api=https://your-api.com)
 const BACKEND_BASE_URL =
   new URLSearchParams(location.search).get("api") ||
-  "https://crystallizedcrust-quiz-generator.hf.space";
+  "http://localhost:8000";
+
 // DOM
 const form = document.getElementById("gen-form");
 const statusAlert = document.getElementById("statusAlert");
 const dlEl = document.getElementById("download");
 const submitBtn = document.getElementById("submit-btn");
 
-const qTotalRange = document.getElementById("q-total");
-const qTotalNum = document.getElementById("q-total-num");
-const customBox = document.getElementById("custom-box");
-const customSum = document.getElementById("custom-sum");
-
 const progressWrap = document.getElementById("progressWrap");
 const progressBar = document.getElementById("progressBar");
 
 // year in footer
 document.getElementById("year").textContent = new Date().getFullYear();
-
-// sync total range + number
-function syncTotals(fromRange) {
-  const val = parseInt(fromRange ? qTotalRange.value : qTotalNum.value, 10) || 1;
-  const clamped = Math.max(1, Math.min(100, val));
-  qTotalRange.value = clamped;
-  qTotalNum.value = clamped;
-  if (!customBox.classList.contains("d-none")) updateCustomSum();
-}
-qTotalRange.addEventListener("input", () => syncTotals(true));
-qTotalNum.addEventListener("input", () => syncTotals(false));
-
-// mix mode show/hide custom
-form.addEventListener("change", (e) => {
-  if (e.target.name === "mix_mode") {
-    const isCustom = e.target.value === "custom";
-    customBox.classList.toggle("d-none", !isCustom);
-    updateCustomSum();
-  }
-});
-
-function updateCustomSum() {
-  if (customBox.classList.contains("d-none")) return;
-  const mcq = +form.mcq_n.value || 0;
-  const th = +form.theory_n.value || 0;
-  const cf = +form.codefill_n.value || 0;
-  const fb = +form.fillblank_n.value || 0;
-  const total = +qTotalNum.value || 0;
-  customSum.textContent = `Sum: ${mcq + th + cf + fb} / ${total}`;
-}
 
 let timer = null;
 function startProgress() {
@@ -96,39 +62,47 @@ form.addEventListener("submit", async (e) => {
   }
   fd.append("file", file);
 
-  fd.append("total_questions", qTotalNum.value);
-  fd.append("mix_mode", form.mix_mode.value);
-  fd.append("difficulty", form.querySelector('input[name="difficulty"]:checked').value);
-  fd.append("include_explanations", form.include_explanations.checked ? "true" : "false");
+  // Options
+  fd.append("num_mocks", form.num_mocks.value || "1");
+  fd.append(
+    "difficulty",
+    form.querySelector('input[name="difficulty"]:checked').value
+  );
 
-  if (form.mix_mode.value === "custom") {
-    fd.append("mcq_n", form.mcq_n.value || "0");
-    fd.append("theory_n", form.theory_n.value || "0");
-    fd.append("codefill_n", form.codefill_n.value || "0");
-    fd.append("fillblank_n", form.fillblank_n.value || "0");
+  // Fix: no language input exists in form, so default to "en"
+  fd.append("language", "en");
+
+  // API key (user-provided takes priority, backend will fallback if none)
+  if (form.openai_api_key && form.openai_api_key.value) {
+    fd.append("openai_api_key", form.openai_api_key.value);
   }
 
-  // 🔄 changed: OpenAI API key (matches backend .env OPENAI_API_KEY)
-  if (form.OpenAI_api_key && form.OpenAI_api_key.value) {
-    fd.append("openai_api_key", form.OpenAI_api_key.value);
-  }
+  console.log("Submitting form data:", [...fd.entries()]);
 
   try {
-    const res = await fetch(`${BACKEND_BASE_URL}/generate`, { method: "POST", body: fd });
-    const data = await res.json();
+    const res = await fetch(`${BACKEND_BASE_URL}/generate`, {
+      method: "POST",
+      body: fd,
+    });
 
-    if (!res.ok || data.status !== "ok") {
-      throw new Error(data.detail || data.message || "Generation failed");
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
     }
 
-    showStatus("Done! Your deck is ready.", "success");
-    const a = document.createElement("a");
-    a.href = data.url;
-    a.textContent = "Download PPTX";
-    a.className = "btn btn-outline-primary";
-    a.download = data.filename;
+    // Expect a ZIP (blob), not JSON
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+
+    // Download button
     dlEl.innerHTML = "";
+    const a = document.createElement("a");
+    a.href = url;
+    a.textContent = "Download Mock Papers (ZIP)";
+    a.className = "btn btn-outline-primary d-block my-1";
+    a.download = "mockpapers.zip";
     dlEl.appendChild(a);
+
+    showStatus("Done! Your mock papers are ready.", "success");
     finishProgress(true);
   } catch (err) {
     console.error(err);
@@ -138,6 +112,3 @@ form.addEventListener("submit", async (e) => {
     submitBtn.disabled = false;
   }
 });
-
-// initialize
-updateCustomSum();

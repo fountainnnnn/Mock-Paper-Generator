@@ -1,24 +1,32 @@
-openai==1.107.1
+# Core API + serving
 fastapi==0.115.0
+starlette==0.37.2
 uvicorn[standard]==0.30.6
 python-multipart==0.0.9
 python-dotenv==1.0.1
+pydantic==2.8.2
 
-python-pptx==1.0.2
-pillow==10.4.0
+# OpenAI client
+openai==1.107.1
+
+# OCR / CV stack
+easyocr==1.7.1
+pillow==11.0.0
+numpy==1.26.4
+opencv-python-headless==4.10.0.84
+imageio==2.37.0
 tqdm==4.66.5
 
-pymupdf==1.24.9
-pypdfium2==4.30.0
-easyocr==1.7.2
+# PDF / DOCX / Reports
+pymupdf==1.24.10          # exposes 'fitz'
+reportlab==4.2.2
+matplotlib==3.9.2
+python-docx==1.1.2
+docx2pdf==0.1.8
 
-numpy==1.26.4
-imageio==2.37.0
-opencv-contrib-python==4.10.0.84
-opencv-python-headless==4.10.0.84
-
+# Google APIs
 google-api-core==2.25.1
 google-auth==2.40.3
 google-auth-httplib2==0.2.0
 googleapis-common-protos==1.70.0
-protobuf==4.25.3
+protobuf==3.20.2
