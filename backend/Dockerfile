@@ -3,11 +3,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # --------------------------------------------------------
-# Install system libraries:
-# - build-essential, swig, pkg-config (for PyMuPDF if no wheels)
-# - libglib2.0-0, libsm6, libxrender1, libxext6, libgl1 (for OpenCV/GUI deps)
-# - poppler-utils (optional PDF utils)
-# - playwright deps (chromium, fonts, sandboxing)
+# Install system libraries
 # --------------------------------------------------------
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -42,12 +38,16 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # --------------------------------------------------------
-# Install Python deps
+# Copy requirements and install Python deps
+# Force CPU-only PyTorch first, then everything else
 # --------------------------------------------------------
 COPY requirements.txt .
 
-RUN pip install --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir \
+      torch==2.4.1+cpu torchvision==0.19.1+cpu torchaudio==2.4.1+cpu \
+      --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir -r requirements.txt
 
 # --------------------------------------------------------
 # Install Chromium for Playwright

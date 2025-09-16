@@ -1,7 +1,7 @@
 // Backend origin (override with ?api=https://your-api.com)
 const BACKEND_BASE_URL =
   new URLSearchParams(location.search).get("api") ||
-  "http://localhost:8000";
+  "https://huggingface.co/spaces/crystallizedcrust/mock-generator";
 
 // DOM
 const form = document.getElementById("gen-form");
