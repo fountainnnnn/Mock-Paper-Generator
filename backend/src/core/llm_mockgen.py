@@ -10,6 +10,10 @@ OpenAI-driven mock exam generator (font-safe math).
 - Junk glyphs (■, ▮, █, etc.) are stripped to "*".
 - MCQs: exactly 4 options, each on its own line (a.–d.) only if present in reference.
 - Structured JSON output; legacy plain-text fallback.
+
+Enhancements:
+- Each mock is a FULL, STANDALONE paper (no cross-mock splitting).
+- Answer key "workings" must be highly detailed (multi-step, ChatGPT-style).
 """
 
 from __future__ import annotations
@@ -187,7 +191,8 @@ MOCKPAPER_SYSTEM = (
     "You are an expert university exam paper generator and formatter. "
     "You output STRICT JSON for each mock exam. "
     "Never include commentary, code fences, or explanations—only JSON. "
-    "All non-ASCII symbols must be output as U+xxxx escapes."
+    "All non-ASCII symbols must be output as U+xxxx escapes. "
+    "Workings in answer keys must be highly detailed and step-by-step."
 )
 
 
@@ -232,7 +237,7 @@ You must return a single JSON object of the form:
               "id": "q2",
               "type": "mcq",
               "marks": 5,
-              "text": "ASCII-safe math only. No answers here.",
+              "text": "ASCII-safe math only. Do NOT include answers here.",
               "options": [
                 "a. First option",
                 "b. Second option",
@@ -248,12 +253,12 @@ You must return a single JSON object of the form:
         {{
           "id": "q1",
           "answer": "Final ASCII-safe answer.",
-          "workings": "ASCII-safe derivation."
+          "workings": "Ultra-detailed step-by-step solution: include GIVEN/GOAL, PLAN, numbered derivation steps, substitutions with intermediate results, simplifications, units, a quick CHECK/verification, and COMMON PITFALLS. Avoid big leaps."
         }},
         {{
           "id": "q2",
           "answer": "b",
-          "workings": "Explanation if needed."
+          "workings": "Detailed reasoning/elimination for each option + the calculation that proves b is correct."
         }}
       ]
     }}
@@ -261,22 +266,27 @@ You must return a single JSON object of the form:
 }}
 
 Hard requirements:
-- Produce exactly {num_mocks} mocks.
-- Preserve the section structure and question types of the reference:
-  * If the reference had MCQs, include them with 4 options (a.–d.).
-  * If the reference had only open-ended questions, do NOT invent MCQs.
-- Math must be ASCII-safe only (x^2, H2O, pi, theta).
-- NO Unicode superscripts/subscripts, NO LaTeX.
-- Every question MUST appear in answer_key with an answer.
+- Produce exactly {num_mocks} mocks in the "mocks" array.
+- Each mock must be a FULL, STANDALONE exam paper. Do NOT partition or split the reference across mocks.
+- For EACH mock:
+  * Match the number of SECTIONS and the number of QUESTIONS per section to the reference (never fewer).
+  * Preserve marks allocation per question and overall total marks (within small rounding).
+  * Preserve question TYPES (MCQs only if present in reference; otherwise free-response).
+  * MCQs must have exactly 4 options a.–d. (ASCII-safe).
+- Math must be ASCII-safe only (x^2, H2O, pi, theta). NO Unicode superscripts/subscripts, NO LaTeX.
+- Every question MUST appear in "answer_key" with:
+  * "answer": the final result (ASCII-safe), and
+  * "workings": a very detailed, step-by-step solution like a ChatGPT explanation (ASCII-safe). Include a minimum of 8 numbered steps for computation-heavy questions; at least 5 steps for conceptual ones. Add a short verification/sanity-check and note common mistakes.
 - Do NOT include answers, solutions, or hints inside "questions".
 - Do NOT use Markdown tables. If a table is needed, output as plain text rows in pipe-delimited format, e.g. "|col1|col2|col3|".
-- JSON ONLY—no prose.
+- Ensure each mock is DISTINCT from the others: do not simply rephrase; introduce fresh contexts/numbers while staying on-topic and at the requested difficulty.
+- Do NOT distribute questions for one mock across different mocks; each mock must be complete on its own.
 
 Difficulty:
 {_difficulty_guidance(difficulty)}
 
-Reference excerpt (<=12k chars):
-{paper_text[:12000]}
+Reference exam (<=60k chars; trimmed if longer):
+{paper_text[:60000]}
 """.strip()
 
 
@@ -301,6 +311,7 @@ def _json_loads_safe(s: str) -> Dict[str, Any]:
     try:
         return json.loads(s)
     except Exception:
+        # Best-effort trailing comma cleanup
         s2 = re.sub(r",\s*([}\]])", r"\1", s)
         return json.loads(s2)
 
@@ -346,11 +357,30 @@ def _ensure_complete_answer_key(m: MockSpec) -> None:
             if q.options:
                 lab = _normalize_mcq_correct_label(q.correct)
                 if lab is None:
-                    ak.append(AnswerItem(id=q.id, answer="[missing]", workings=None))
+                    ak.append(
+                        AnswerItem(
+                            id=q.id,
+                            answer="[missing]",
+                            workings="Step-by-step reasoning not provided by model; include elimination of each option and the confirming calculation."
+                        )
+                    )
                 else:
-                    ak.append(AnswerItem(id=q.id, answer=lab, workings=None))
+                    ak.append(
+                        AnswerItem(
+                            id=q.id,
+                            answer=lab,
+                            workings="Step-by-step reasoning not provided by model; explain why this option is correct and others are not."
+                        )
+                    )
             else:
-                ak.append(AnswerItem(id=q.id, answer="[missing]", workings=None))
+                ak.append(
+                    AnswerItem(
+                        id=q.id,
+                        answer="[missing]",
+                        workings=("Step-by-step solution not provided by model; include: GIVEN/GOAL, PLAN, numbered derivation, "
+                                  "substitutions with intermediate values, simplifications, units, verification, pitfalls.")
+                    )
+                )
             existing.add(q.id)
 
     m.answer_key = ak
@@ -366,11 +396,20 @@ def generate_mock_specs(
     model_name: str = OPENAI_DEFAULT_MODEL,
     api_key: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
+    # Cap to 3 like before (unchanged behavior)
     num_mocks = max(1, min(num_mocks, 3))
     client = configure_openai(api_key)
     prompt = build_structured_prompt(paper_text, difficulty, num_mocks)
 
-    resp = client.chat.completions.create(
+    resp = client.chat_completions.create(  # type: ignore[attr-defined]
+        model=model_name,
+        messages=[
+            {"role": "system", "content": MOCKPAPER_SYSTEM},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.7,
+        response_format={"type": "json_object"},
+    ) if hasattr(client, "chat_completions") else client.chat.completions.create(
         model=model_name,
         messages=[
             {"role": "system", "content": MOCKPAPER_SYSTEM},
@@ -405,7 +444,8 @@ LEGACY_SYSTEM = (
     "Produce two parts: exam paper and answer key. "
     "Math must be ASCII-safe (x^2, H2O, pi, theta). "
     "Never use Unicode superscripts/subscripts or LaTeX. "
-    "If the reference had only free-response questions, do not invent MCQs."
+    "If the reference had only free-response questions, do not invent MCQs. "
+    "Answer key must include extremely detailed step-by-step solutions."
 )
 
 
@@ -414,13 +454,18 @@ def _build_legacy_prompt(paper_text: str, difficulty: str, num_mocks: int) -> st
 {LEGACY_SYSTEM}
 
 Constraints:
-- Preserve sections, headers, question counts, numbering, and marks.
-- Preserve question types: MCQs only if present in reference, otherwise free-response.
-- ASCII-safe math only. No Unicode, no LaTeX.
-- MCQs: 4 options, each on its own line a.–d.
+- For EACH mock, produce a FULL, STANDALONE paper. Do NOT partition or split the reference across mocks.
+- Match the number of SECTIONS and number of QUESTIONS per section to the reference (never fewer).
+- Preserve question TYPES. MCQs only if present in reference; MCQs must have exactly 4 options a.–d.
+- Preserve marks allocation per question and overall total marks (within small rounding).
+- ASCII-safe math only. No Unicode superscripts/subscripts. No LaTeX.
 - Provide answers for ALL questions.
+- The ANSWER KEY must include ultra-detailed, step-by-step workings (ChatGPT-style) for EVERY question:
+  • Include GIVEN/GOAL, PLAN, at least 8 numbered steps for quantitative problems (5+ for conceptual),
+  • show substitutions with intermediate values, simplifications, units,
+  • include a verification/sanity-check and common pitfalls.
 - Do NOT include answers inside questions.
-- Do NOT use Markdown tables. Use plain text rows in pipe-delimited format (e.g. "|col1|col2|").
+- Do NOT use Markdown tables. Use pipe-delimited plain text if needed (e.g. "|col1|col2|").
 
 Difficulty:
 {_difficulty_guidance(difficulty)}
@@ -428,12 +473,12 @@ Difficulty:
 Output format (STRICT):
 For each of {num_mocks} mock exams:
 ### MOCK PAPER X
-<questions>
+<full paper with sections and questions>
 ### ANSWER KEY X
-<answers covering EVERY question>
+<answers covering EVERY question with step-by-step workings>
 
-Reference exam (<=12k chars):
-{paper_text[:12000]}
+Reference exam (<=60k chars; trimmed if longer):
+{paper_text[:60000]}
 """.strip()
 
 
@@ -456,6 +501,7 @@ def _render_spec_to_text(spec: Dict[str, Any]) -> Tuple[str, str]:
         for q in sec.questions:
             marks_str = f" ({q.marks} marks)" if q.marks else ""
             q_text = normalize_unicode_math(f"{q.id}. {q.text}{marks_str}")
+            # strip any accidental answer text inside the question body
             q_text = re.sub(r"(Answer\s*:.*|Correct\s*:.*)$", "", q_text, flags=re.I).strip()
             paper_lines.append(q_text)
             if q.options:
@@ -485,6 +531,11 @@ def generate_mock_papers(
     model_name: str = OPENAI_DEFAULT_MODEL,
     api_key: Optional[str] = None,
 ) -> List[Tuple[str, str]]:
+    """
+    Returns a list of (paper_text, answer_key_text) tuples.
+    Structured path first; if it fails, use legacy text format with
+    improved pairing logic to avoid question splitting across mocks.
+    """
     try:
         specs = generate_mock_specs(
             paper_text=paper_text,
@@ -495,10 +546,18 @@ def generate_mock_papers(
         )
         return [_render_spec_to_text(spec) for spec in specs]
     except Exception:
+        # Legacy fallback (text parsing)
         client = configure_openai(api_key)
         prompt = _build_legacy_prompt(paper_text, difficulty, num_mocks)
 
-        resp = client.chat.completions.create(
+        resp = client.chat_completions.create(  # type: ignore[attr-defined]
+            model=model_name,
+            messages=[
+                {"role": "system", "content": LEGACY_SYSTEM},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.7,
+        ) if hasattr(client, "chat_completions") else client.chat.completions.create(
             model=model_name,
             messages=[
                 {"role": "system", "content": LEGACY_SYSTEM},
@@ -508,35 +567,49 @@ def generate_mock_papers(
         )
         raw = resp.choices[0].message.content.strip() if resp.choices else ""
 
-        outputs: List[Tuple[str, str]] = []
-        current_paper, current_answers = [], []
-        mode = None
+        # Improved pairing logic:
+        # Keep a list of pairs; when we hit "MOCK PAPER", start a new pair;
+        # when we hit "ANSWER KEY", attach answers to the most recent pair that lacks them.
+        pairs: List[Dict[str, List[str]]] = []
+        current_mode: Optional[str] = None  # "paper" | "answers" | None
+        current_idx: Optional[int] = None
 
         for line in raw.splitlines():
             tag = line.strip().lower()
-            if tag.startswith("### mock paper"):
-                if current_paper or current_answers:
-                    outputs.append((
-                        "\n".join(current_paper).strip(),
-                        "\n".join(current_answers).strip(),
-                    ))
-                    current_paper, current_answers = [], []
-                mode = "paper"
-                continue
-            if tag.startswith("### answer key"):
-                mode = "answers"
-                continue
-            if mode == "paper":
-                current_paper.append(normalize_unicode_math(line))
-            elif mode == "answers":
-                current_answers.append(normalize_unicode_math(line))
 
-        if current_paper or current_answers:
-            outputs.append((
-                "\n".join(current_paper).strip(),
-                "\n".join(current_answers).strip(),
-            ))
+            if tag.startswith("### mock paper"):
+                # Start a new pair
+                pairs.append({"paper": [], "answers": []})
+                current_idx = len(pairs) - 1
+                current_mode = "paper"
+                continue
+
+            if tag.startswith("### answer key"):
+                # Attach to most recent pair without answers; create one if needed
+                attach_idx = None
+                for i in range(len(pairs) - 1, -1, -1):
+                    if not pairs[i]["answers"]:
+                        attach_idx = i
+                        break
+                if attach_idx is None:
+                    pairs.append({"paper": [], "answers": []})
+                    attach_idx = len(pairs) - 1
+                current_idx = attach_idx
+                current_mode = "answers"
+                continue
+
+            if current_mode and current_idx is not None:
+                pairs[current_idx][current_mode].append(normalize_unicode_math(line))
+
+        # Convert to outputs; ensure we have num_mocks pairs (pad if needed)
+        outputs: List[Tuple[str, str]] = []
+        for pair in pairs:
+            paper = "\n".join(pair["paper"]).strip()
+            answers = "\n".join(pair["answers"]).strip()
+            if paper or answers:
+                outputs.append((paper, answers))
 
         while len(outputs) < max(1, min(num_mocks, 3)):
             outputs.append(("", ""))
+
         return outputs[:num_mocks]

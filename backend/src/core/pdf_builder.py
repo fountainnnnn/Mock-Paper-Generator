@@ -8,7 +8,7 @@ ReportLab-only PDF builder for mock exam papers (Unicode math mode).
 - OCR normalization for basic symbols and junk stripping (■, ▮, █ → *).
 - Styles for sections, questions, answers, marks.
 - MCQ options a./b./c./d. are printed line by line.
-- Markdown-like tables |a|b| → rendered as ReportLab tables.
+- Markdown-like tables |a|b| → rendered as ReportLab tables (works in both question and answer key).
 """
 
 from typing import Optional, List, Union
@@ -132,11 +132,15 @@ style_answer = ParagraphStyle(
     "Answer",
     parent=style_body,
     fontName=DEFAULT_FONT,
-    leftIndent=10,
+    leftIndent=14,
     backColor=LIGHT_GREEN_BG,
     textColor=OK_GREEN,
-    spaceBefore=4,
-    spaceAfter=8,
+    spaceBefore=6,
+    spaceAfter=10,
+    borderWidth=0.5,
+    borderColor=OK_GREEN,
+    borderPadding=4,
+    leading=BASE_LEADING,
 )
 
 style_marks = ParagraphStyle(
@@ -218,7 +222,6 @@ def prettify_ascii_math(expr: str) -> str:
     expr = expr.replace("sqrt", "√")
     expr = expr.replace("exp", "e")  
 
-    # only digits/+-= become superscripts/subscripts (avoid black-box parens)
     expr = re.sub(r"\^([0-9+\-=]+)", lambda m: m.group(1).translate(_SUPERSCRIPT_MAP), expr)
     expr = re.sub(r"_([0-9+\-=]+)", lambda m: m.group(1).translate(_SUBSCRIPT_MAP), expr)
 
@@ -231,8 +234,8 @@ def prettify_ascii_math(expr: str) -> str:
 def _ocr_normalize(s: str) -> str:
     """Normalize OCR/LLM quirks into safe text/math symbols."""
     s = decode_unicode_escapes(s)
-    s = (s.replace("•", ".")   # bullet → plain dot, not star
-           .replace("·", ".")  # middle dot → dot
+    s = (s.replace("•", ".")
+           .replace("·", ".")
            .replace("×", "*")
            .replace("−", "-").replace("–", "-").replace("—", "-")
            .replace("⁄", "/").replace("°", " deg"))
@@ -262,7 +265,11 @@ def build_mockpaper_pdf(
     story: List[Union[Flowable, Paragraph]] = []
 
     story.append(Spacer(1, 22))
-    story.append(Paragraph(title, style_cover_title))
+    # Differentiate cover page for QP vs Answer key
+    if is_answer_key:
+        story.append(Paragraph(f"{title} — Answer Key", style_cover_title))
+    else:
+        story.append(Paragraph(f"{title} — Question Paper", style_cover_title))
     if source_name:
         story.append(Paragraph(source_name, style_cover_sub))
     story.append(Paragraph("Instructions", style_instr_head))
@@ -308,7 +315,30 @@ def build_mockpaper_pdf(
             continue
 
         if is_answer_key:
-            story.append(Paragraph(prettify_ascii_math(line), style_answer))
+            if re.match(r"^\|.+\|$", line):
+                table_lines = []
+                while i < len(lines) and re.match(r"^\|.+\|$", lines[i].strip()):
+                    row = [prettify_ascii_math(c.strip()) for c in lines[i].strip().strip("|").split("|")]
+                    table_lines.append(row)
+                    i += 1
+                tbl = Table(table_lines, style=TableStyle([
+                    ("GRID", (0,0), (-1,-1), 0.5, colors.black),
+                    ("FONTNAME", (0,0), (-1,-1), DEFAULT_FONT),
+                    ("FONTSIZE", (0,0), (-1,-1), BASE_FONTSIZE),
+                    ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+                    ("ALIGN", (0,0), (-1,-1), "CENTER"),
+                ]))
+                story.append(tbl)
+                continue
+
+            # For answer keys: keep question number only on the first line of each answer
+            if re.match(r"^\s*(?:\d+\s*[.)])", line):
+                # First line of answer → keep number
+                story.append(Paragraph(prettify_ascii_math(line), style_answer))
+            else:
+                # Subsequent lines → strip any leftover numbering
+                clean_line = re.sub(r"^\s*(?:[a-d][.)])\s*", "", line, flags=re.I)
+                story.append(Paragraph(prettify_ascii_math(clean_line), style_answer))
             i += 1
             continue
 
