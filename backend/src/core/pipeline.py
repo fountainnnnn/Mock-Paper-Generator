@@ -67,9 +67,11 @@ def run_pipeline_end_to_end(
     if not saved_paths:
         raise ValueError("No input files provided for processing.")
     
-    # ensure the easyocr is already downloaded
+    # --- Ensure EasyOCR weights and cache
     from .bootstrap import ensure_easyocr_weights
-    ensure_easyocr_weights()
+    reader = ensure_easyocr_weights()
+    print(f"[DEBUG] EasyOCR initialized with model dir={reader.model_storage_directory}, "
+          f"user dir={reader.user_network_directory}")
 
     # --- Extract reference text
     extract_result = papers_to_clean_text(
