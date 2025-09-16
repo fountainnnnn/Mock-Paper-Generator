@@ -15,6 +15,22 @@ const progressBar = document.getElementById("progressBar");
 // year in footer
 document.getElementById("year").textContent = new Date().getFullYear();
 
+// AOS animations
+if (window.AOS) {
+  AOS.init({ duration: 800, once: true });
+}
+
+// Smooth scroll + focus
+const getStartedBtn = document.getElementById("get-started");
+if (getStartedBtn) {
+  getStartedBtn.addEventListener("click", () => {
+    setTimeout(() => {
+      const fileInput = document.getElementById("file-input");
+      if (fileInput) fileInput.focus();
+    }, 450);
+  });
+}
+
 let timer = null;
 function startProgress() {
   progressWrap.classList.remove("d-none");
@@ -42,6 +58,7 @@ function finishProgress(success = true) {
 function showStatus(message, type = "info") {
   statusAlert.className = `alert alert-${type}`;
   statusAlert.textContent = message;
+  statusAlert.classList.remove("d-none");
 }
 
 form.addEventListener("submit", async (e) => {
@@ -69,10 +86,10 @@ form.addEventListener("submit", async (e) => {
     form.querySelector('input[name="difficulty"]:checked').value
   );
 
-  // Fix: no language input exists in form, so default to "en"
+  // Default language
   fd.append("language", "en");
 
-  // API key (user-provided takes priority, backend will fallback if none)
+  // API key (optional)
   if (form.openai_api_key && form.openai_api_key.value) {
     fd.append("openai_api_key", form.openai_api_key.value);
   }
@@ -89,7 +106,6 @@ form.addEventListener("submit", async (e) => {
       throw new Error(`HTTP ${res.status}`);
     }
 
-    // Expect a ZIP (blob), not JSON
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
 
@@ -98,7 +114,7 @@ form.addEventListener("submit", async (e) => {
     const a = document.createElement("a");
     a.href = url;
     a.textContent = "Download Mock Papers (ZIP)";
-    a.className = "btn btn-outline-primary d-block my-1";
+    a.className = "btn btn-outline-accent d-block my-1";
     a.download = "mockpapers.zip";
     dlEl.appendChild(a);
 

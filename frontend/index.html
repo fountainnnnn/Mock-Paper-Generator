@@ -4,78 +4,83 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Mock Paper Generator</title>
-  <link rel="icon" href="data:image/svg+xml,<svg viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📄</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📑</text></svg>">
 
   <!-- Bootstrap 5 -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <!-- Custom styles -->
-  <link rel="stylesheet" href="styles.css" />
+  <!-- AOS CSS -->
+  <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+  <!-- Custom CSS (cache-busted) -->
+  <link rel="stylesheet" href="styles.css?v=20250916">
 </head>
 <body class="d-flex flex-column min-vh-100">
 
   <!-- NAVBAR -->
-  <nav class="navbar navbar-light border-bottom bg-white">
+  <nav class="navbar navbar-light fixed-top">
     <div class="container">
-      <a class="navbar-brand fw-semibold" href="#">Mock Paper Generator</a>
+      <a class="navbar-brand" href="#">Mock Paper Generator</a>
     </div>
   </nav>
 
   <!-- HERO -->
-  <header class="py-5 hero bg-hero border-bottom">
-    <div class="container text-center">
-      <h1 class="display-6 fw-bold mb-2 hero-title">Generate Fresh Mock Exam Papers</h1>
-      <p class="lead text-secondary mb-3">
-        Upload your reference exam paper, pick difficulty and number of new versions, then download fresh exam-ready PDFs with answer keys.
+  <header class="hero">
+    <div class="container">
+      <h1 data-aos="fade-up">Mock Paper Generator</h1>
+      <p class="hero-subtitle" data-aos="fade-up" data-aos-delay="100">
+        Made by Mervin Ng
       </p>
-      <p class="text-muted small mb-4">Made by <strong>Mervin Ng</strong></p>
-      <a id="get-started" href="#generate" class="btn btn-primary px-4">Get Started</a>
+      <p class="description mt-3 mb-4" data-aos="fade-up" data-aos-delay="200">
+        Don't have enough mock paper for practice? Generate more with our Mock Paper Generator!
+      </p>
+      <a id="get-started" href="#generate" class="btn btn-accent px-4" data-aos="fade-up" data-aos-delay="400">
+        Get Started
+      </a>
     </div>
+    <a href="#generate" class="scroll-down">↓</a>
   </header>
 
   <!-- MAIN -->
   <main id="generate" class="flex-grow-1 py-5">
-    <div class="container">
+    <div class="container" data-aos="fade-up">
       <div class="row justify-content-center">
-        <div class="col-lg-10 col-xl-9">
-          <div class="card shadow-sm" id="gen-card">
-            <div class="card-body">
-              <h3 class="card-title mb-3">Generate your mock paper</h3>
-              <p class="text-secondary">Upload your mock paper, select options, and provide your OpenAI API key (recommended).</p>
-
+        <div class="col-lg-8">
+          <div class="card pastel-card shadow-sm">
+            <div class="card-body p-4">
+              <h3 class="fw-semibold mb-3 text-accent">Generate your mock paper</h3>
               <form id="gen-form" class="gy-3">
                 <!-- File -->
                 <div class="mb-3">
-                  <label class="form-label">Mock paper (.pdf / .docx)</label>
+                  <label class="form-label">Upload exam paper (.pdf / .docx)</label>
                   <input id="file-input" class="form-control" type="file" name="file" accept=".pdf,.docx" required />
                 </div>
 
                 <div class="row g-4">
                   <!-- Number of mocks -->
                   <div class="col-md-6">
-                    <label class="form-label">How many new mocks? <span class="text-secondary">(1–3)</span></label>
+                    <label class="form-label">Number of new mocks</label>
                     <input id="num-mocks" class="form-control" type="number" name="num_mocks" min="1" max="3" value="1" />
                   </div>
 
                   <!-- Difficulty -->
                   <div class="col-md-6">
                     <label class="form-label">Difficulty</label>
-                    <div class="btn-group d-flex" role="group">
+                    <div class="btn-group w-100" role="group">
                       <input type="radio" class="btn-check" name="difficulty" id="d1" value="easy">
-                      <label class="btn btn-outline-secondary" for="d1">easy</label>
+                      <label class="btn btn-outline-accent" for="d1">Easy</label>
 
                       <input type="radio" class="btn-check" name="difficulty" id="d2" value="same" checked>
-                      <label class="btn btn-outline-secondary" for="d2">same</label>
+                      <label class="btn btn-outline-accent" for="d2">Same</label>
 
                       <input type="radio" class="btn-check" name="difficulty" id="d3" value="harder">
-                      <label class="btn btn-outline-secondary" for="d3">harder</label>
+                      <label class="btn btn-outline-accent" for="d3">Harder</label>
                     </div>
                   </div>
                 </div>
 
                 <!-- API key -->
                 <div class="mb-3 mt-3">
-                  <label class="form-label">OpenAI API key <span class="text-secondary">(use your own for reliability)</span></label>
-                  <input class="form-control" type="password" name="openai_api_key" placeholder="Insert your own OpenAI API Key here" />
+                  <label class="form-label">OpenAI API key</label>
+                  <input class="form-control" type="password" name="openai_api_key" placeholder="Insert your API Key (recommended)" />
                 </div>
 
                 <!-- Progress -->
@@ -88,7 +93,7 @@
 
                 <!-- Actions -->
                 <div class="d-flex align-items-center gap-3">
-                  <button type="submit" id="submit-btn" class="btn btn-primary px-4">Generate paper</button>
+                  <button type="submit" id="submit-btn" class="btn btn-accent px-4">Generate</button>
                   <div id="download"></div>
                 </div>
               </form>
@@ -100,44 +105,45 @@
   </main>
 
   <!-- CONTACT -->
-  <section class="contact-section text-center">
-    <div class="container">
-      <h5 class="mb-3">Found an issue or have feedback?</h5>
-      <a href="https://www.linkedin.com/in/ngyuhang/" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary">
-        <svg xmlns="http://www.w3.org/2000/svg" class="linkedin-logo" viewBox="0 0 16 16">
-          <path d="M0 1.146C0 .513.526 0 1.175 0h13.65C15.474 0 16 .513 
-          16 1.146v13.708c0 .633-.526 1.146-1.175 
-          1.146H1.175C.526 16 0 15.487 0 
-          14.854V1.146zM4.943 13.5V6.169H2.542V13.5h2.401zm-1.2-8.258c.837 
-          0 1.358-.554 1.358-1.248-.015-.71-.52-1.248-1.342-1.248S2.4 
-          3.285 2.4 3.994c0 .694.52 1.248 1.327 
-          1.248h.016zm4.908 8.258V9.359c0-.221.016-.442.08-.599.176-.442.576-.9 
-          1.248-.9.881 0 1.233.678 1.233 
-          1.672V13.5h2.401V9.25c0-2.273-1.214-3.335-2.834-3.335-1.309 
-          0-1.898.725-2.227 1.233h.016v-1.05H8.651c.03.678 0 
-          7.402 0 7.402h2.401z"/>
-        </svg>
-        <span>Connect with me on LinkedIn</span>
-      </a>
-    </div>
-  </section>
+<section class="py-5 text-center border-top" data-aos="fade-up">
+  <div class="container">
+    <h5 class="mb-3">Got any feedback/suggestions? Let's connect!</h5>
+    <a href="https://www.linkedin.com/in/ngyuhang/" 
+       target="_blank" 
+       rel="noopener noreferrer" 
+       class="btn btn-linkedin d-inline-flex align-items-center gap-2 px-4 py-2">
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+        <path d="M0 1.146C0 .513.526 0 1.175 0h13.65C15.474 
+                 0 16 .513 16 1.146v13.708c0 .633-.526 
+                 1.146-1.175 1.146H1.175C.526 16 0 
+                 15.487 0 14.854V1.146zm4.943 
+                 12.248V6.169H2.542v7.225h2.401zm-1.2-8.212c.837 
+                 0 1.358-.554 1.358-1.248-.015-.709-.521-1.248-1.342-1.248-.822 
+                 0-1.358.54-1.358 1.248 0 .694.521 
+                 1.248 1.327 1.248h.015zm4.908 
+                 8.212V9.359c0-.216.016-.432.08-.586.174-.431.571-.878 
+                 1.237-.878.873 0 1.222.662 1.222 
+                 1.634v3.865h2.401V9.25c0-2.22-1.184-3.252-2.764-3.252-1.274 
+                 0-1.845.7-2.165 1.193v.025h-.016a5.54 
+                 5.54 0 0 1 .016-.025V6.169h-2.4c.03.678 
+                 0 7.225 0 7.225h2.4z"/>
+      </svg>
+      Connect on LinkedIn
+    </a>
+  </div>
+</section>
+
 
   <!-- FOOTER -->
-  <footer class="border-top py-3 bg-white mt-auto">
-    <div class="container d-flex justify-content-between align-items-center">
-      <span class="text-secondary small">© <span id="year"></span> Mock Paper Generator © 2025 All rights reserved.</span>
-      <a class="small text-secondary" href="#generate">Back to top</a>
+  <footer class="py-3 text-center">
+    <div class="container small">
+      © <span id="year"></span> Mock Paper Generator. All rights reserved.
     </div>
   </footer>
 
-  <!-- Bootstrap JS -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script>
-    document.getElementById("year").textContent = new Date().getFullYear();
-    document.getElementById("get-started").addEventListener("click", () => {
-      setTimeout(() => document.getElementById("file-input").focus(), 450);
-    });
-  </script>
-  <script src="app.js"></script>
+  <!-- Scripts (cache-busted) -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" defer></script>
+  <script src="https://unpkg.com/aos@2.3.1/dist/aos.js" defer></script>
+  <script src="app.js?v=20250916" defer></script>
 </body>
 </html>

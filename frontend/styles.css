@@ -1,87 +1,152 @@
 html { scroll-behavior: smooth; }
+body { background: #fafafa; color: #333; }
 
-/* Hero background gradient */
-.hero {
-  background: linear-gradient(135deg, #f3e8ff 0%, #ede9fe 50%, #faf5ff 100%);
+:root {
+  --lavender: #ede9fe;
+  --sky: #bfdbfe;
+  --mint: #d1fae5;
+  --accent: #7c3aed;
 }
 
-/* Primary buttons + progress bar with gradient */
-.btn-primary,
-.progress-bar {
-  background: linear-gradient(135deg, #6f42c1, #8b5cf6) !important;
-  border: none !important;
-  color: #fff !important;
+/* NAVBAR */
+.navbar {
+  background: var(--lavender) !important;
+  border-bottom: 1px solid #e5e7eb;
 }
-.btn-primary:hover,
-.btn-primary:focus {
-  background: linear-gradient(135deg, #59359c, #7c3aed) !important;
-  color: #fff !important;
-}
-
-/* Navbar brand = purple text only */
-.navbar .navbar-brand {
-  color: #6f42c1 !important;
-  background: none !important;
-  border: none !important;
-}
-
-/* Hero title = plain purple text */
-.hero-title {
-  color: #6f42c1 !important;
+.navbar-brand {
+  color: var(--accent) !important;
   font-weight: 700;
 }
 
-/* Difficulty toggle active state in purple with gradient */
-.btn-check:checked + .btn-outline-secondary {
-  background: linear-gradient(135deg, #6f42c1, #8b5cf6) !important;
+/* HERO */
+.hero {
+  min-height: 100vh;
+  background: linear-gradient(135deg, var(--lavender) 0%, var(--sky) 50%, var(--mint) 100%);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  text-align: center;
+  position: relative;
+}
+
+.hero h1 {
+  font-size: clamp(3rem, 8vw, 5rem);
+  font-weight: 800;
+  background: linear-gradient(
+    90deg,
+    #6d28d9,   /* deep purple */
+    var(--accent), 
+    #3b82f6    /* sky blue */
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 0.5rem;
+
+  /* Start fully clear shadow */
+  text-shadow: 0 4px 16px rgba(124, 58, 237, 0);
+
+  transition: text-shadow 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hero h1:hover {
+  /* Slowly fades in */
+  text-shadow: 0 4px 16px rgba(124, 58, 237, 0.3);
+}
+
+
+
+.hero-subtitle {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 1rem;
+}
+.hero p.description {
+  font-size: 1.15rem;
+  color: #444;
+  font-weight: 400;
+  line-height: 1.6;
+  max-width: 650px;
+  margin-left: auto;
+  margin-right: auto;
+  transition: color 0.3s ease-in-out;
+}
+.hero p.description:hover {
+  color: #222;
+}
+.scroll-down {
+  position: absolute; bottom: 2rem;
+  font-size: 1.5rem; color: #4b5563;
+  animation: bounce 1.5s infinite;
+}
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(6px); }
+}
+
+/* CARD */
+.pastel-card {
+  background: #fff !important;
+  border-radius: 1rem;
+  border: 1px solid #e5e7eb;
+}
+
+/* BUTTONS */
+.btn-accent {
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  font-weight: 600;
+  border-radius: 6px;
+  transition: all 0.2s ease-in-out;
+}
+.btn-accent:hover {
+  background: #5b21b6;
+}
+.btn-outline-accent {
+  border: 2px solid var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+  background: #fff;
+  transition: all 0.2s ease-in-out;
+}
+.btn-outline-accent:hover,
+.btn-check:checked + .btn-outline-accent {
+  background: var(--accent) !important;
   color: #fff !important;
-  border: none !important;
+  border-color: var(--accent) !important;
 }
-
-/* Contact section */
-.contact-section {
-  background: linear-gradient(180deg, #f9fafb, #f3f4f6);
-  border-top: 1px solid #e5e7eb;
-  padding: 2rem 0;
-}
-.linkedin-logo {
-  width: 20px;
-  height: 20px;
-  margin-right: 6px;
-}
-
 /* LinkedIn button */
-.contact-section a.btn-outline-primary {
+/* Purple LinkedIn button */
+.btn-linkedin {
+  background-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  border-radius: 6px;
+  transition: all 0.2s ease-in-out;
+  border: none;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-weight: 500;
-  text-decoration: none;
-
-  padding: 0.375rem 0.75rem;   /* standard button size */
-  font-size: 1rem;
-  line-height: 1.5;
-  border-radius: 0.375rem;
-
-  color: #0a66c2 !important;
-  border-color: #0a66c2 !important;
-  background: transparent !important;
+  gap: 8px;
+}
+.btn-linkedin:hover {
+  background-color: #5b21b6; /* darker purple */
+  color: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.35);
+}
+.btn-linkedin svg {
+  flex-shrink: 0;
 }
 
-.contact-section a.btn-outline-primary span,
-.contact-section a.btn-outline-primary svg {
-  color: inherit !important;
-  fill: currentColor !important;
+
+/* Progress bar */
+.progress-bar {
+  background: var(--accent);
 }
 
-.contact-section a.btn-outline-primary:hover,
-.contact-section a.btn-outline-primary:focus {
-  background: linear-gradient(135deg, #0a66c2, #2563eb) !important;
-  color: #ffffff !important;
-  border-color: transparent !important;
-}
-
-/* Footer with gradient fade */
+/* FOOTER */
 footer {
-  background: linear-gradient(180deg, #ffffff 0%, #f9fafb 100%);
+  background: #fff;
+  color: #6b7280;
+  border-top: 1px solid #e5e7eb;
 }
