@@ -68,7 +68,7 @@ def run_pipeline_end_to_end(
         raise ValueError("No input files provided for processing.")
     
     # --- Ensure EasyOCR weights and cache
-    from .bootstrap import ensure_easyocr_weights
+    from .bootstrap import ensure_easyocr_weights_v2 as ensure_easyocr_weights
     reader = ensure_easyocr_weights()
     print(f"[DEBUG] EasyOCR initialized with model dir={reader.model_storage_directory}, "
           f"user dir={reader.user_network_directory}")
