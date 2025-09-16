@@ -3,30 +3,30 @@ import os
 from pathlib import Path
 import easyocr
 
-# Directories
+# Paths
 EASYOCR_MODELS = Path(__file__).resolve().parent.parent / "models" / "easyocr"
-EASYOCR_CACHE = Path("/tmp/.easyocr_cache")  # Hugging Face writable dir
+EASYOCR_CACHE = Path("/tmp/.easyocr_cache")
 
 def ensure_easyocr_weights(lang: str = "en"):
     """
-    Initialize EasyOCR with bundled weights and forced /tmp cache.
-    This version replaces all old ones so pipeline always uses it.
+    Initialize EasyOCR, forcing cache to /tmp to avoid permission errors.
     """
-    # Ensure dirs exist
+    # Ensure directories exist
     EASYOCR_MODELS.mkdir(parents=True, exist_ok=True)
     EASYOCR_CACHE.mkdir(parents=True, exist_ok=True)
 
-    print(f"[DEBUG] EasyOCR model dir (read-only): {EASYOCR_MODELS}")
-    print(f"[DEBUG] EasyOCR cache dir (writable temp): {EASYOCR_CACHE}")
+    print("[BOOTSTRAP] ensure_easyocr_weights() CALLED")
+    print(f"[BOOTSTRAP] model dir: {EASYOCR_MODELS}")
+    print(f"[BOOTSTRAP] cache dir: {EASYOCR_CACHE}")
 
-    # Reader uses /tmp cache, no downloads, no GPU
+    # Force EasyOCR to use our dirs
     reader = easyocr.Reader(
         [lang],
         model_storage_directory=str(EASYOCR_MODELS),
         user_network_directory=str(EASYOCR_CACHE),
         download_enabled=False,
-        gpu=False
+        gpu=False,
     )
 
-    print("[BOOTSTRAP] EasyOCR reader initialized (no downloads, /tmp cache)")
+    print("[BOOTSTRAP] EasyOCR reader initialized with /tmp cache")
     return reader
