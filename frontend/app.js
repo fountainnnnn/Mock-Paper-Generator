@@ -1,7 +1,7 @@
 // Backend origin (override with ?api=https://your-api.com)
 const BACKEND_BASE_URL =
   new URLSearchParams(location.search).get("api") ||
-  "https://huggingface.co/spaces/crystallizedcrust/mock-generator";
+  "https://crystallizedcrust-mock-generator.hf.space";
 
 // DOM
 const form = document.getElementById("gen-form");
