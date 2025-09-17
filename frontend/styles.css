@@ -90,6 +90,56 @@ body { background: #fafafa; color: #333; }
   border: 1px solid #e5e7eb;
 }
 
+/* FAQ Section */
+#faqAccordion .accordion-item {
+  border: none;
+  margin-bottom: 0.75rem;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  background: #fff;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+#faqAccordion .accordion-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+}
+
+#faqAccordion .accordion-button {
+  background: var(--lavender);
+  font-weight: 600;
+  color: var(--accent);
+  padding: 1rem 1.25rem;
+  box-shadow: none;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+#faqAccordion .accordion-button:not(.collapsed) {
+  background: var(--accent);
+  color: #fff;
+}
+
+#faqAccordion .accordion-button::after {
+  filter: invert(45%) sepia(100%) saturate(300%) hue-rotate(240deg);
+  transition: transform 0.3s ease;
+}
+
+#faqAccordion .accordion-button:not(.collapsed)::after {
+  filter: brightness(0) invert(1);
+  transform: rotate(180deg);
+}
+
+#faqAccordion .accordion-body {
+  background: #f9fafb;
+  color: #374151;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+
 /* BUTTONS */
 .btn-accent {
   background: var(--accent);

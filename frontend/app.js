@@ -31,19 +31,25 @@ if (getStartedBtn) {
   });
 }
 
-let timer = null;
-function startProgress() {
+let progressTimer = null;
+
+function startFakeProgress() {
+  let pct = 0;
   progressWrap.classList.remove("d-none");
-  progressBar.style.width = "2%";
   progressBar.classList.add("progress-bar-animated");
-  let pct = 2;
-  timer = setInterval(() => {
-    pct = Math.min(90, pct + Math.random() * 6);
+
+  progressTimer = setInterval(() => {
+    if (pct < 85) {
+      pct += 1; // phase 1: slow climb
+    } else if (pct < 95) {
+      pct += 1; // phase 2: creep
+    }
     progressBar.style.width = pct + "%";
-  }, 250);
+  }, 800); // 0.8s per 1% → ~68s to reach 85%, ~80s to reach 95%
 }
+
 function finishProgress(success = true) {
-  if (timer) clearInterval(timer);
+  if (progressTimer) clearInterval(progressTimer);
   progressBar.classList.remove("progress-bar-animated");
   progressBar.style.width = "100%";
   progressBar.classList.toggle("bg-success", success);
@@ -65,9 +71,11 @@ form.addEventListener("submit", async (e) => {
   e.preventDefault();
 
   dlEl.innerHTML = "";
-  showStatus("Uploading and generating…", "info");
+  showStatus(
+    "Uploading your file and generating mock papers… please wait. (If it gets stuck for more than 5 minutes, refresh the page and try again)",
+    "info"
+  );
   submitBtn.disabled = true;
-  startProgress();
 
   const fd = new FormData();
   const file = form.querySelector('input[type="file"]').files[0];
@@ -96,35 +104,38 @@ form.addEventListener("submit", async (e) => {
 
   console.log("Submitting form data:", [...fd.entries()]);
 
-  try {
-    const res = await fetch(`${BACKEND_BASE_URL}/generate`, {
-      method: "POST",
-      body: fd,
-    });
+  const xhr = new XMLHttpRequest();
+  xhr.open("POST", `${BACKEND_BASE_URL}/generate`, true);
+  xhr.responseType = "blob";
 
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
+  xhr.onload = () => {
+    if (xhr.status === 200) {
+      const blob = xhr.response;
+      const url = URL.createObjectURL(blob);
+
+      dlEl.innerHTML = "";
+      const a = document.createElement("a");
+      a.href = url;
+      a.textContent = "Download Mock Papers (ZIP)";
+      a.className = "btn btn-outline-accent d-block my-1";
+      a.download = "mockpapers.zip";
+      dlEl.appendChild(a);
+
+      showStatus("Done! Your mock papers are ready.", "success");
+      finishProgress(true);
+    } else {
+      showStatus(`Error: HTTP ${xhr.status}`, "danger");
+      finishProgress(false);
     }
-
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-
-    // Download button
-    dlEl.innerHTML = "";
-    const a = document.createElement("a");
-    a.href = url;
-    a.textContent = "Download Mock Papers (ZIP)";
-    a.className = "btn btn-outline-accent d-block my-1";
-    a.download = "mockpapers.zip";
-    dlEl.appendChild(a);
-
-    showStatus("Done! Your mock papers are ready.", "success");
-    finishProgress(true);
-  } catch (err) {
-    console.error(err);
-    showStatus(`Error: ${err.message}`, "danger");
-    finishProgress(false);
-  } finally {
     submitBtn.disabled = false;
-  }
+  };
+
+  xhr.onerror = () => {
+    showStatus("Network error occurred.", "danger");
+    finishProgress(false);
+    submitBtn.disabled = false;
+  };
+
+  xhr.send(fd);
+  startFakeProgress(); // gradual 0 → 95%
 });
