@@ -1,269 +1,182 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Mock Paper Generator</title>
-  <link rel="icon" type="image/x-icon" href="logo.png">
-
-  <!-- Bootstrap 5 -->
+  <title>Mervin Ng | Mock Paper Generator</title>
+  <meta name="description" content="Generate formatted mock exam papers and answer keys from study materials." />
+  <link rel="shortcut icon" href="logo.png" type="image/png">
+  <link rel="apple-touch-icon" href="logo.png">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <!-- AOS CSS -->
-  <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
-  <!-- Custom CSS (cache-busted) -->
-  <link rel="stylesheet" href="styles.css?v=20250916">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="styles.css?v=20260527">
+  <link rel="stylesheet" href="project-theme.css?v=20260527">
 </head>
-<body class="d-flex flex-column min-vh-100">
-
-  <!-- NAVBAR -->
-  <nav class="navbar navbar-light fixed-top">
+<body class="project-app project-mock-paper">
+  <nav class="navbar navbar-expand-lg navbar-light fixed-top" aria-label="Primary navigation">
     <div class="container">
-      <a class="navbar-brand" href="#">Mock Paper Generator</a>
+      <a class="navbar-brand fw-bold" href="https://ngyuhang.com/#hero">Mervin's Hub</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
+        <ul class="navbar-nav">
+          <li class="nav-item"><a class="nav-link" href="https://ngyuhang.com/#about">About</a></li>
+          <li class="nav-item"><a class="nav-link" href="https://ngyuhang.com/projects" aria-current="page">Projects</a></li>
+          <li class="nav-item"><a class="nav-link" href="https://ngyuhang.com/#skills">Skills</a></li>
+          <li class="nav-item"><a class="nav-link" href="https://ngyuhang.com/#contact">Contact</a></li>
+        </ul>
+      </div>
     </div>
   </nav>
 
-  <!-- HERO -->
-  <header class="hero">
-    <div class="container">
-      <h1 data-aos="fade-up">Mock Paper Generator</h1>
-      <p class="hero-subtitle" data-aos="fade-up" data-aos-delay="100">
-        Made by Mervin Ng
-      </p>
-      <p class="description mt-3 mb-4" data-aos="fade-up" data-aos-delay="200">
-        Don't have enough mock paper for practice? Generate more with our Mock Paper Generator!
-      </p>
-      <a id="get-started" href="#generate" class="btn btn-accent px-4" data-aos="fade-up" data-aos-delay="400">
-        Get Started
-      </a>
-    </div>
-    <a href="#generate" class="scroll-down">↓</a>
-  </header>
+  <main>
+    <section id="hero" class="section project-hero">
+      <div class="container hero-container">
+        <div class="project-hero-copy">
+          <a class="project-back-link" href="https://ngyuhang.com/projects"><i class="bi bi-arrow-left"></i> All projects</a>
+          <p class="project-kicker">AI exam workflow</p>
+          <h1><span id="hero-typer">Mock Paper Generator</span></h1>
+          <p class="project-hero-lede">Upload an existing paper or worksheet, then generate new mock papers with answer keys, OCR fallback, and clean PDF packaging.</p>
+          <div class="project-hero-actions">
+            <a id="get-started" href="#generate" class="btn btn-accent">Open generator <i class="bi bi-arrow-down-short"></i></a>
+            <a href="https://ngyuhang.com/projects" class="btn btn-outline-dark">Back to work</a>
+          </div>
+        </div>
+        <aside class="project-product-preview" aria-label="Mock paper interface preview">
+          <div class="preview-window">
+            <div class="preview-window-bar"><span></span><span></span><span></span></div>
+            <div class="preview-paper">
+              <div class="preview-paper-title">Mathematics mock paper</div>
+              <div class="preview-paper-line long"></div>
+              <div class="preview-paper-line"></div>
+              <div class="preview-question-row"><span>1</span><p>Explain the pattern in the sequence.</p></div>
+              <div class="preview-question-row"><span>2</span><p>Solve the equation and show working.</p></div>
+              <div class="preview-answer-key">Answer key included</div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
 
-  <!-- MAIN -->
-  <main id="generate" class="flex-grow-1 py-5">
-    <div class="container" data-aos="fade-up">
-      <div class="row justify-content-center">
-        <div class="col-lg-8">
-          <div class="card pastel-card shadow-sm">
-            <div class="card-body p-4">
-              <h3 class="fw-semibold mb-3 text-accent">Generate your mock paper</h3>
-              <form id="gen-form" class="gy-3">
-                <!-- File -->
-                <div class="mb-3">
-                  <label class="form-label">Upload exam paper (.pdf / .docx)</label>
-                  <input id="file-input" class="form-control" type="file" name="file" accept=".pdf,.docx" required />
+    <section id="generate" class="section project-workspace">
+      <div class="container">
+        <div class="project-section-heading">
+          <p class="project-kicker">Generator</p>
+          <h2>Create practice papers.</h2>
+          <p>Choose the file, number of papers, and difficulty target. The backend returns a ZIP of generated PDFs.</p>
+        </div>
+
+        <div class="project-generator-grid">
+        <div class="card pastel-card project-form-card">
+          <div class="card-body">
+            <div class="tool-card-heading">
+              <div>
+                <p class="project-kicker">Paper builder</p>
+                <h3 class="fw-semibold mb-0 text-accent">Generation controls</h3>
+              </div>
+              <span class="tool-status-pill"><i class="bi bi-file-earmark-zip"></i> ZIP output</span>
+            </div>
+            <form id="gen-form" class="gy-3">
+              <div class="mb-3">
+                <label class="form-label">Upload exam paper (.pdf / .docx)</label>
+                <input id="file-input" class="form-control" type="file" name="file" accept=".pdf,.docx" required />
+              </div>
+
+              <div class="row g-4">
+                <div class="col-md-6">
+                  <label class="form-label">Number of new mocks (max 3)</label>
+                  <input id="num-mocks" class="form-control" type="number" name="num_mocks" min="1" max="3" value="1" />
                 </div>
 
-                <div class="row g-4">
-                  <!-- Number of mocks -->
-                  <div class="col-md-6">
-                    <label class="form-label">Number of new mocks (max 3)</label>
-                    <input id="num-mocks" class="form-control" type="number" name="num_mocks" min="1" max="3" value="1" />
+                <div class="col-md-6">
+                  <label class="form-label">Difficulty</label>
+                  <div class="btn-group w-100" role="group" aria-label="Difficulty">
+                    <input type="radio" class="btn-check" name="difficulty" id="d1" value="easy">
+                    <label class="btn btn-outline-accent" for="d1">Easy</label>
+                    <input type="radio" class="btn-check" name="difficulty" id="d2" value="same" checked>
+                    <label class="btn btn-outline-accent" for="d2">Same</label>
+                    <input type="radio" class="btn-check" name="difficulty" id="d3" value="harder">
+                    <label class="btn btn-outline-accent" for="d3">Harder</label>
                   </div>
-
-                  <!-- Difficulty -->
-                  <div class="col-md-6">
-                    <label class="form-label">Difficulty</label>
-                    <div class="btn-group w-100" role="group">
-                      <input type="radio" class="btn-check" name="difficulty" id="d1" value="easy">
-                      <label class="btn btn-outline-accent" for="d1">Easy</label>
-
-                      <input type="radio" class="btn-check" name="difficulty" id="d2" value="same" checked>
-                      <label class="btn btn-outline-accent" for="d2">Same</label>
-
-                      <input type="radio" class="btn-check" name="difficulty" id="d3" value="harder">
-                      <label class="btn btn-outline-accent" for="d3">Harder</label>
-                    </div>
-                  </div>
                 </div>
+              </div>
 
-                <!-- API key -->
-                <div class="mb-3 mt-3">
-                  <label class="form-label">OpenAI API key</label>
-                  <input class="form-control" type="password" name="openai_api_key" placeholder="Insert your API Key (recommended)" />
-                </div>
+              <div class="mb-3 mt-3">
+                <label class="form-label">DeepSeek API key</label>
+                <input class="form-control" type="password" name="openai_api_key" placeholder="Leave empty to use backend .env" />
+              </div>
 
-                <!-- Progress -->
-                <div id="progressWrap" class="progress mb-3 d-none" role="progressbar" aria-valuemin="0" aria-valuemax="100">
-                  <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%"></div>
-                </div>
+              <div id="progressWrap" class="progress mb-3 d-none" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+                <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%"></div>
+              </div>
+              <div id="statusAlert" class="alert d-none" role="alert"></div>
 
-                <!-- Status -->
-                <div id="statusAlert" class="alert d-none" role="alert"></div>
+              <div class="d-flex align-items-center gap-3 project-action-row">
+                <button type="submit" id="submit-btn" class="btn btn-accent px-4">Generate papers</button>
+                <div id="download"></div>
+              </div>
+            </form>
+          </div>
+        </div>
+        <aside class="project-insight-panel" aria-label="Mock paper workflow">
+          <p class="project-kicker">Workflow</p>
+          <h3>From source to pack.</h3>
+          <div class="insight-step"><span>1</span><p>Extract questions from the uploaded paper with text/OCR fallback.</p></div>
+          <div class="insight-step"><span>2</span><p>Generate fresh variants against the selected difficulty target.</p></div>
+          <div class="insight-step"><span>3</span><p>Package mock papers and answer keys into one download.</p></div>
+        </aside>
+        </div>
+      </div>
+    </section>
 
-                <!-- Actions -->
-                <div class="d-flex align-items-center gap-3">
-                  <button type="submit" id="submit-btn" class="btn btn-accent px-4">Generate</button>
-                  <div id="download"></div>
-                </div>
-              </form>
+    <section id="faq" class="section project-faq">
+      <div class="container">
+        <div class="project-section-heading">
+          <p class="project-kicker">Notes</p>
+          <h2>Before you generate.</h2>
+        </div>
+        <div class="accordion" id="faqAccordion">
+          <div class="accordion-item">
+            <h2 class="accordion-header" id="faq1">
+              <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq1Collapse">What files work best?</button>
+            </h2>
+            <div id="faq1Collapse" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+              <div class="accordion-body">PDF and DOCX files with clear questions and structure usually produce the cleanest output.</div>
+            </div>
+          </div>
+          <div class="accordion-item">
+            <h2 class="accordion-header" id="faq2">
+              <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2Collapse">Why is the max set to 3?</button>
+            </h2>
+            <div id="faq2Collapse" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+              <div class="accordion-body">Paper generation is heavier than a simple chat response, so the limit keeps the experience reliable.</div>
+            </div>
+          </div>
+          <div class="accordion-item">
+            <h2 class="accordion-header" id="faq3">
+              <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3Collapse">Can I edit the result?</button>
+            </h2>
+            <div id="faq3Collapse" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+              <div class="accordion-body">The output is packaged for download as generated documents, with answer materials included.</div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </section>
   </main>
-  <!-- FAQ -->
-  <section class="py-5 border-top" data-aos="fade-up">
-    <div class="container">
-      <h3 class="fw-semibold mb-4 text-accent text-center">Frequently Asked Questions</h3>
-      <div class="accordion" id="faqAccordion">
 
-        <!-- Q1 -->
-        <div class="accordion-item">
-          <h2 class="accordion-header" id="faq1">
-            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq1Collapse" aria-expanded="false" aria-controls="faq1Collapse">
-              Q: My questions or answers contain errors, what can I do?
-            </button>
-          </h2>
-          <div id="faq1Collapse" class="accordion-collapse collapse" aria-labelledby="faq1" data-bs-parent="#faqAccordion">
-            <div class="accordion-body">
-              A: Simply try again and regenerate the mock paper. Each run may produce a different variation as the model may not be as consistent.
-            </div>
-          </div>
-        </div>
-
-        <!-- Q2 -->
-        <div class="accordion-item">
-          <h2 class="accordion-header" id="faq2">
-            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2Collapse" aria-expanded="false" aria-controls="faq2Collapse">
-              Q: Can I generate more than 3 mock papers at once?
-            </button>
-          </h2>
-          <div id="faq2Collapse" class="accordion-collapse collapse" aria-labelledby="faq2" data-bs-parent="#faqAccordion">
-            <div class="accordion-body">
-              A: Currently, you can generate up to 3 mock papers in a single request. This ensures performance and quality of each generation.
-            </div>
-          </div>
-        </div>
-
-        <!-- Q3 -->
-        <div class="accordion-item">
-          <h2 class="accordion-header" id="faq3">
-            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3Collapse" aria-expanded="false" aria-controls="faq3Collapse">
-              Q: Do I need to provide my OpenAI API key?
-            </button>
-          </h2>
-          <div id="faq3Collapse" class="accordion-collapse collapse" aria-labelledby="faq3" data-bs-parent="#faqAccordion">
-            <div class="accordion-body">
-              A: It’s recommended to insert your own API key for reliability, but you may proceed without one depending on availability.
-            </div>
-          </div>
-        </div>
-
-                <!-- Q4 -->
-        <div class="accordion-item">
-          <h2 class="accordion-header" id="faq4">
-            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq4Collapse" aria-expanded="false" aria-controls="faq4Collapse">
-              Q: Will my uploaded file be stored anywhere?
-            </button>
-          </h2>
-          <div id="faq4Collapse" class="accordion-collapse collapse" aria-labelledby="faq4" data-bs-parent="#faqAccordion">
-            <div class="accordion-body">
-              A: No, uploaded files are only used temporarily for generation and are not stored permanently on the server.
-            </div>
-          </div>
-        </div>
-
-        <!-- Q5 -->
-        <div class="accordion-item">
-          <h2 class="accordion-header" id="faq5">
-            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq5Collapse" aria-expanded="false" aria-controls="faq5Collapse">
-              Q: What file formats are supported?
-            </button>
-          </h2>
-          <div id="faq5Collapse" class="accordion-collapse collapse" aria-labelledby="faq5" data-bs-parent="#faqAccordion">
-            <div class="accordion-body">
-              A: Currently, you can upload <code>.pdf</code> and <code>.docx</code> files. Other formats may be added in the future.
-            </div>
-          </div>
-        </div>
-
-        <!-- Q6 -->
-        <div class="accordion-item">
-          <h2 class="accordion-header" id="faq6">
-            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq6Collapse" aria-expanded="false" aria-controls="faq6Collapse">
-              Q: Why does it sometimes take a long time to generate?
-            </button>
-          </h2>
-          <div id="faq6Collapse" class="accordion-collapse collapse" aria-labelledby="faq6" data-bs-parent="#faqAccordion">
-            <div class="accordion-body">
-              A: Processing time depends on the length and complexity of your uploaded paper. If it takes unusually long, try refreshing and submitting again.
-            </div>
-          </div>
-        </div>
-
-        <!-- Q7 -->
-        <div class="accordion-item">
-          <h2 class="accordion-header" id="faq7">
-            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq7Collapse" aria-expanded="false" aria-controls="faq7Collapse">
-              Q: Can I edit the generated mock papers?
-            </button>
-          </h2>
-          <div id="faq7Collapse" class="accordion-collapse collapse" aria-labelledby="faq7" data-bs-parent="#faqAccordion">
-            <div class="accordion-body">
-              A: Yes, the generated ZIP file contains documents that you can open and edit freely in your preferred editor.
-            </div>
-          </div>
-        </div>
-
-        <!-- Q8 -->
-        <div class="accordion-item">
-          <h2 class="accordion-header" id="faq8">
-            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq8Collapse" aria-expanded="false" aria-controls="faq8Collapse">
-              Q: Is there a cost to using this tool?
-            </button>
-          </h2>
-          <div id="faq8Collapse" class="accordion-collapse collapse" aria-labelledby="faq8" data-bs-parent="#faqAccordion">
-            <div class="accordion-body">
-              A: The tool itself is free to use, but if you use your own OpenAI API key, OpenAI will charge you based on their usage rates.
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </div>
-  </section>
-  <!-- CONTACT -->
-<section class="py-5 text-center border-top" data-aos="fade-up">
-  <div class="container">
-    <h5 class="mb-3">Got any feedback/suggestions? Let's connect!</h5>
-    <a href="https://www.linkedin.com/in/ngyuhang/" 
-       target="_blank" 
-       rel="noopener noreferrer" 
-       class="btn btn-linkedin d-inline-flex align-items-center gap-2 px-4 py-2">
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
-        <path d="M0 1.146C0 .513.526 0 1.175 0h13.65C15.474 
-                 0 16 .513 16 1.146v13.708c0 .633-.526 
-                 1.146-1.175 1.146H1.175C.526 16 0 
-                 15.487 0 14.854V1.146zm4.943 
-                 12.248V6.169H2.542v7.225h2.401zm-1.2-8.212c.837 
-                 0 1.358-.554 1.358-1.248-.015-.709-.521-1.248-1.342-1.248-.822 
-                 0-1.358.54-1.358 1.248 0 .694.521 
-                 1.248 1.327 1.248h.015zm4.908 
-                 8.212V9.359c0-.216.016-.432.08-.586.174-.431.571-.878 
-                 1.237-.878.873 0 1.222.662 1.222 
-                 1.634v3.865h2.401V9.25c0-2.22-1.184-3.252-2.764-3.252-1.274 
-                 0-1.845.7-2.165 1.193v.025h-.016a5.54 
-                 5.54 0 0 1 .016-.025V6.169h-2.4c.03.678 
-                 0 7.225 0 7.225h2.4z"/>
-      </svg>
-      Connect on LinkedIn
-    </a>
-  </div>
-</section>
-
-
-  <!-- FOOTER -->
-  <footer class="py-3 text-center">
-    <div class="container small">
-      © <span id="year"></span> Mock Paper Generator. All rights reserved.
+  <footer class="site-footer footer-section bg-dark text-light py-4">
+    <div class="container text-center">
+      <small>&copy; 2025 Mervin Ng. All rights reserved.</small>
     </div>
   </footer>
 
-  <!-- Scripts (cache-busted) -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" defer></script>
-  <script src="https://unpkg.com/aos@2.3.1/dist/aos.js" defer></script>
-  <script src="app.js?v=20250916" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js" defer></script>
+  <script src="https://unpkg.com/lenis@1.3.4/dist/lenis.min.js" defer></script>
+  <script src="motion.js" defer></script>
+  <script src="app.js?v=20260527" defer></script>
 </body>
 </html>

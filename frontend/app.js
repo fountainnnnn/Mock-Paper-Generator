@@ -1,7 +1,7 @@
 // Backend origin (override with ?api=https://your-api.com)
 const BACKEND_BASE_URL =
   new URLSearchParams(location.search).get("api") ||
-  "https://crystallizedcrust-mock-generator.hf.space";
+  "http://localhost:7860";
 
 // DOM
 const form = document.getElementById("gen-form");
@@ -11,9 +11,6 @@ const submitBtn = document.getElementById("submit-btn");
 
 const progressWrap = document.getElementById("progressWrap");
 const progressBar = document.getElementById("progressBar");
-
-// year in footer
-document.getElementById("year").textContent = new Date().getFullYear();
 
 // AOS animations
 if (window.AOS) {
@@ -76,6 +73,7 @@ form.addEventListener("submit", async (e) => {
     "info"
   );
   submitBtn.disabled = true;
+  startFakeProgress();
 
   const fd = new FormData();
   const file = form.querySelector('input[type="file"]').files[0];
@@ -102,13 +100,12 @@ form.addEventListener("submit", async (e) => {
     fd.append("openai_api_key", form.openai_api_key.value);
   }
 
-  console.log("Submitting form data:", [...fd.entries()]);
-
   const xhr = new XMLHttpRequest();
   xhr.open("POST", `${BACKEND_BASE_URL}/generate`, true);
   xhr.responseType = "blob";
+  xhr.timeout = 300000;
 
-  xhr.onload = () => {
+  xhr.onload = async () => {
     if (xhr.status === 200) {
       const blob = xhr.response;
       const url = URL.createObjectURL(blob);
@@ -124,7 +121,15 @@ form.addEventListener("submit", async (e) => {
       showStatus("Done! Your mock papers are ready.", "success");
       finishProgress(true);
     } else {
-      showStatus(`Error: HTTP ${xhr.status}`, "danger");
+      let errorMessage = `HTTP ${xhr.status}`;
+      try {
+        const text = await xhr.response.text();
+        const parsed = JSON.parse(text);
+        errorMessage = parsed.detail || parsed.message || parsed.error || errorMessage;
+      } catch (error) {
+        // Keep the HTTP fallback when the upstream does not return JSON.
+      }
+      showStatus(`Error: ${errorMessage}`, "danger");
       finishProgress(false);
     }
     submitBtn.disabled = false;
@@ -136,6 +141,16 @@ form.addEventListener("submit", async (e) => {
     submitBtn.disabled = false;
   };
 
+  xhr.ontimeout = () => {
+    showStatus("The request timed out. Try a smaller file or fewer mock papers.", "danger");
+    finishProgress(false);
+    submitBtn.disabled = false;
+  };
+
   xhr.send(fd);
-  startFakeProgress(); // gradual 0 → 95%
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  const el = document.getElementById("hero-typer");
+  if (el) el.textContent = "Mock Paper Generator";
 });

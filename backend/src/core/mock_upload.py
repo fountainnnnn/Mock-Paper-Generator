@@ -1,38 +1,22 @@
 # backend/src/core/mock_upload.py
 # -*- coding: utf-8 -*-
 """
-Robust text extraction utilities for uploaded mock exam papers (PDF/DOCX).
+Text extraction for uploaded mock exam papers (PDF/DOCX).
 
-- PDF: prefer native text layer, fallback to OCR (EasyOCR) for scanned/math regions.
-- DOCX: use python-docx for text extraction.
-- OCR preprocessing: grayscale, binarize, denoise.
+- Each page is read by the vision page reader (vision.py): exact question text,
+  numbering and marks, math as LaTeX.
+- Without a vision provider, or for pages whose vision call fails, the native
+  text layer is used (PyMuPDF for PDF, python-docx for DOCX).
 - Outputs both plain text and simple HTML (with math spans preserved).
 """
 
 from pathlib import Path
 from typing import List, Dict
+import logging
 
-import fitz  # PyMuPDF
-from docx import Document
-import numpy as np
-import cv2
+from .vision import read_document
 
-from .ocr import get_ocr_engine, ocr_image_easy
-
-
-# =========================
-# Preprocessing helper
-# =========================
-def _preprocess_for_ocr(img: np.ndarray) -> np.ndarray:
-    """Convert to grayscale + binarize + denoise for sharper OCR."""
-    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY) if img.ndim == 3 else img
-    th = cv2.adaptiveThreshold(
-        gray, 255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY, 35, 11
-    )
-    th = cv2.fastNlMeansDenoising(th, h=15)
-    return th
+log = logging.getLogger(__name__)
 
 
 # =========================
@@ -58,57 +42,11 @@ def _wrap_html_paragraphs(text: str) -> str:
     return "\n".join(html_lines)
 
 
-def _extract_text_from_pdf(path: str, lang: str = "en", dpi: int = 400) -> str:
-    """
-    Extract text from a PDF file.
-    - Try native PDF text layer first.
-    - Fallback to OCR (EasyOCR) for scanned pages.
-    - Returns plain text string.
-    """
-    text_blocks: List[str] = []
-    doc = fitz.open(path)
-
-    # OCR engine (lazy init)
-    reader = None
-
-    for i, page in enumerate(doc):
-        native_text = page.get_text("text").strip()
-        if native_text:
-            print(f"[DEBUG] Page {i}: native text ({len(native_text)} chars)")
-            text_blocks.append(native_text)
-            continue
-
-        # Init OCR engine only if needed
-        if reader is None:
-            reader = get_ocr_engine(lang)
-
-        # Render page to image
-        pix = page.get_pixmap(matrix=fitz.Matrix(dpi / 72, dpi / 72))
-        img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
-        if pix.n == 4:  # RGBA → RGB
-            img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
-
-        img = _preprocess_for_ocr(img)
-
-        # OCR fallback
-        results = ocr_image_easy(reader, img)
-        page_texts = [r["text"] for r in results if r.get("text")]
-
-        if page_texts:
-            joined = " ".join(page_texts)
-            print(f"[DEBUG] Page {i}: OCR extracted {len(joined)} chars")
-            text_blocks.append(joined)
-        else:
-            print(f"[WARNING] Page {i}: OCR returned nothing")
-
-    return "\n".join(text_blocks)
-
-
-def _extract_text_from_docx(path: str) -> str:
-    """Extract plain text from a DOCX file."""
-    doc = Document(path)
-    paras = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
-    return "\n".join(paras)
+def _extract_text(path: Path, out_dir: Path, lang: str = "en", dpi: int = 220) -> str:
+    """Per-page transcriptions from the vision reader (text-layer fallback), in page order."""
+    work_dir = out_dir / f"pages_{path.stem}"
+    pages = read_document(path, work_dir, dpi=dpi, language=lang)
+    return "\n\n".join(t for t in pages if t.strip())
 
 
 import re
@@ -149,18 +87,15 @@ def papers_to_clean_text(
 
     for f in files:
         p = Path(f)
-        if p.suffix.lower() == ".pdf":
-            plain = _extract_text_from_pdf(str(p), lang=lang, dpi=dpi)
-        elif p.suffix.lower() in {".docx", ".doc"}:
-            plain = _extract_text_from_docx(str(p))
-        else:
+        if p.suffix.lower() not in {".pdf", ".docx", ".doc"}:
             raise ValueError(f"Unsupported file type: {p.suffix}")
+        plain = _extract_text(p, out_dir, lang=lang, dpi=dpi)
 
         if plain.strip():
             all_plain.append(plain)
             all_html.append(_wrap_html_paragraphs(plain))
         else:
-            print(f"[WARNING] No text extracted from {p.name}")
+            log.warning("No text extracted from %s", p.name)
 
     # Save plain text
     concat_plain = "\n\n".join(all_plain).strip()

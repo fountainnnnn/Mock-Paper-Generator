@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Rendering utilities for exam papers.
-- PDF → PNG per page (for OCR on scanned math/printed papers)
+- PDF → PNG per page (for the vision page reader)
 - DOCX → PDF → PNG (optional, requires docx2pdf on Windows/macOS or LibreOffice on Linux)
 """
 
@@ -16,9 +16,10 @@ import shutil
 # ---------------------------
 # PDF → PNG (PyMuPDF)
 # ---------------------------
-def pdf_to_png(pdf_path: str | Path, out_dir: str | Path, dpi: int = 220) -> List[Path]:
+def pdf_to_png(pdf_path: str | Path, out_dir: str | Path, dpi: int = 220, max_pages: int | None = None) -> List[Path]:
     """
     Rasterize a PDF to PNG pages using PyMuPDF at a target DPI.
+    Only the first `max_pages` pages are rendered when a cap is given.
     """
     from fitz import open as fitz_open, Matrix
 
@@ -32,6 +33,8 @@ def pdf_to_png(pdf_path: str | Path, out_dir: str | Path, dpi: int = 220) -> Lis
     mat = Matrix(zoom, zoom)
 
     for i, page in enumerate(doc, 1):
+        if max_pages is not None and i > max_pages:
+            break
         pix = page.get_pixmap(matrix=mat)
         p = out / f"page_{i:03d}.png"
         pix.save(str(p))

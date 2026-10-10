@@ -6,32 +6,17 @@ python-multipart==0.0.9
 python-dotenv==1.0.1
 pydantic==2.8.2
 
-# OpenAI client
+# OpenAI-compatible client (DeepSeek text generation + vision page reader)
 openai==1.107.1
 
-# OCR / CV stack
-easyocr==1.7.1
+# Images (vision page reader: embedded pictures → PNG)
 pillow==11.0.0
-numpy==1.26.4
-opencv-python-headless==4.10.0.84
-imageio==2.37.0
-tqdm==4.66.5
 
 # PDF / DOCX / Reports
 pymupdf==1.24.10          # exposes 'fitz'
 reportlab==4.2.2
-matplotlib==3.9.2
 python-docx==1.1.2
 docx2pdf==0.1.8
-
-
-
-# Google APIs
-google-api-core==2.25.1
-google-auth==2.40.3
-google-auth-httplib2==0.2.0
-googleapis-common-protos==1.70.0
-protobuf==3.20.2
 
 # HTML rendering / Markdown → HTML → KaTeX
 jinja2==3.1.4
@@ -40,6 +25,3 @@ mdit-py-plugins==0.4.0
 
 # Headless browser for high-quality PDF printing
 playwright==1.47.0
-
-# Optional LaTeX parsing (used only for light validation)
-sympy==1.13.2
