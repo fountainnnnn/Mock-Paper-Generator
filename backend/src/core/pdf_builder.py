@@ -219,15 +219,15 @@ def prettify_ascii_math(expr: str) -> str:
     expr = decode_unicode_escapes(expr)
     expr = expr.replace("\\cdot", "·").replace("\\times", "·")
     expr = expr.replace("*", "·")
-    expr = expr.replace("sqrt", "√")
-    expr = expr.replace("exp", "e")  
+    # Whole words only: "pitfalls", "expression" and code must survive.
+    expr = re.sub(r"\bsqrt\b", "√", expr)
 
     expr = re.sub(r"\^([0-9+\-=]+)", lambda m: m.group(1).translate(_SUPERSCRIPT_MAP), expr)
     expr = re.sub(r"_([0-9+\-=]+)", lambda m: m.group(1).translate(_SUBSCRIPT_MAP), expr)
 
-    expr = expr.replace("pi", "π").replace("theta", "θ")
-    expr = expr.replace("{", "").replace("}", "")
-    expr = expr.replace("[", "").replace("]", "")
+    expr = re.sub(r"\bpi\b", "π", expr)
+    expr = re.sub(r"\btheta\b", "θ", expr)
+    # Brackets and braces are kept: they carry meaning in code (lst[2], {"a": 1}).
 
     return expr
 
